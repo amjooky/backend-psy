@@ -1,0 +1,110 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Infrastructure-only compose for local development.
+# Run backend with: npm run start:dev
+# Run frontend with: npm run dev (in /frontend)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: monpsy_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: monpsy_user
+      POSTGRES_PASSWORD: monpsy_password
+      POSTGRES_DB: monpsy_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    networks:
+      - monpsy_network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U monpsy_user -d monpsy_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Redis Cache & Queue
+  # ─────────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: monpsy_redis
+    restart: unless-stopped
+    command: redis-server --requirepass redis_password --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - '6379:6379'
+    networks:
+      - monpsy_network
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'redis_password', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # MinIO Object Storage (S3-compatible)
+  # ─────────────────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: monpsy_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+    volumes:
+      - minio_data:/data
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    networks:
+      - monpsy_network
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # MinIO Client (bucket initialization)
+  # ─────────────────────────────────────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: monpsy_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - monpsy_network
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set monpsy http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing monpsy/monpsy;
+      mc anonymous set download monpsy/monpsy/public;
+      exit 0;
+      "
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  monpsy_network:
+    driver: bridge
+    name: monpsy_network

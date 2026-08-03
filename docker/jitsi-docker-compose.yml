@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Prosody (XMPP Server for Jitsi signaling)
+  prosody:
+    image: jitsi/prosody:stable-9584
+    restart: unless-stopped
+    networks:
+      - jitsi-net
+    expose:
+      - '5222'
+      - '5269'
+      - '5280'
+    volumes:
+      - prosody-config:/config
+    environment:
+      - JWT_ACCEPTED_ISSUERS=monpsy
+      - JWT_ACCEPTED_AUDIENCES=monpsy
+      - JWT_ASAP_KEYSERVER=https://meet.monpsy.tn/keys
+      - JWT_APP_ID=monpsy
+      - JWT_APP_SECRET=jitsiappsecret1234567890jitsiappsecret
+      - AUTH_TYPE=jwt
+      - LOG_LEVEL=info
+
+  # Jicofo (Jitsi Conference Focus - room allocator)
+  jicofo:
+    image: jitsi/jicofo:stable-9584
+    restart: unless-stopped
+    networks:
+      - jitsi-net
+    volumes:
+      - jicofo-config:/config
+    environment:
+      - XMPP_SERVER=prosody
+      - XMPP_DOMAIN=meet.monpsy.tn
+      - XMPP_AUTH_DOMAIN=auth.meet.monpsy.tn
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.monpsy.tn
+      - LOG_LEVEL=info
+
+  # JVB (Jitsi Videobridge - WebRTC selective forwarding unit SFU)
+  jvb:
+    image: jitsi/jvb:stable-9584
+    restart: unless-stopped
+    ports:
+      - '10000:10000/udp'
+      - '3030:3030/tcp'
+    networks:
+      - jitsi-net
+    volumes:
+      - jvb-config:/config
+    environment:
+      - XMPP_SERVER=prosody
+      - XMPP_DOMAIN=meet.monpsy.tn
+      - XMPP_AUTH_DOMAIN=auth.meet.monpsy.tn
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.monpsy.tn
+      - JVB_AUTH_USER=jvb
+      - JVB_AUTH_PASSWORD=jvbpassword123
+      - JVB_BREWERY_MUC=jvbbrewery@internal-muc.meet.monpsy.tn
+      - JVB_PORT=10000
+      - LOG_LEVEL=info
+
+  # Web (Nginx interface serving front-end & proxying Prosody/JVB)
+  web:
+    image: jitsi/web:stable-9584
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+      - '8443:443'
+    networks:
+      - jitsi-net
+    volumes:
+      - web-config:/config
+    environment:
+      - XMPP_SERVER=prosody
+      - XMPP_DOMAIN=meet.monpsy.tn
+      - XMPP_AUTH_DOMAIN=auth.meet.monpsy.tn
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.monpsy.tn
+      - ENABLE_AUTH=1
+      - ENABLE_GUESTS=1
+      - AUTH_TYPE=jwt
+      - JWT_ACCEPTED_ISSUERS=monpsy
+      - JWT_ACCEPTED_AUDIENCES=monpsy
+      - PUBLIC_URL=https://meet.monpsy.tn
+
+networks:
+  jitsi-net:
+    driver: bridge
+
+volumes:
+  prosody-config:
+  jicofo-config:
+  jvb-config:
+  web-config:

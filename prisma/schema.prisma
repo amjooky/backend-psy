@@ -1,0 +1,897 @@
+// ==================================================
+// Monpsy — PostgreSQL Schema via Prisma ORM
+// Production-Ready: Indexes, FKs, Enums, All Tables
+// ==================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================================================
+// ENUMS
+// ==================================================
+
+enum UserRole {
+  PATIENT
+  PSYCHOLOGIST
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  MISSED
+  RESCHEDULED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  STRIPE
+  KONNECT
+  FLOUCI
+  PAYMEE
+  MOCK
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  PDF
+  VIDEO
+  SYSTEM
+}
+
+enum NotificationType {
+  APPOINTMENT_BOOKED
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_CANCELLED
+  APPOINTMENT_REMINDER
+  APPOINTMENT_COMPLETED
+  APPOINTMENT_MISSED
+  PAYMENT_CONFIRMED
+  PAYMENT_FAILED
+  PAYMENT_REFUNDED
+  NEW_MESSAGE
+  REVIEW_RECEIVED
+  ACCOUNT_VERIFIED
+  PASSWORD_CHANGED
+  DOCUMENT_UPLOADED
+  SYSTEM
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+  SMS
+  IN_APP
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_USER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  REGISTER
+  PASSWORD_CHANGE
+  PASSWORD_RESET
+  EMAIL_VERIFY
+  TOKEN_REFRESH
+  TWO_FACTOR_ENABLE
+  TWO_FACTOR_DISABLE
+  APPOINTMENT_BOOK
+  APPOINTMENT_CANCEL
+  APPOINTMENT_CONFIRM
+  APPOINTMENT_COMPLETE
+  PAYMENT_INITIATE
+  PAYMENT_COMPLETE
+  REFUND_REQUEST
+  DOCUMENT_UPLOAD
+  DOCUMENT_DELETE
+  PROFILE_UPDATE
+  ADMIN_ACTION
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum SessionFormat {
+  VIDEO
+  AUDIO
+  CHAT
+  IN_PERSON
+}
+
+enum CertificateStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PsychologistStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+// ==================================================
+// USERS
+// ==================================================
+
+model User {
+  id                String    @id @default(uuid()) @db.Uuid
+  email             String    @unique @db.VarChar(255)
+  passwordHash      String    @map("password_hash") @db.VarChar(255)
+  role              UserRole  @default(PATIENT)
+  isEmailVerified   Boolean   @default(false) @map("is_email_verified")
+  isActive          Boolean   @default(true) @map("is_active")
+  isTwoFactorEnabled Boolean  @default(false) @map("is_two_factor_enabled")
+  twoFactorSecret   String?   @map("two_factor_secret") @db.VarChar(255)
+  lastLoginAt       DateTime? @map("last_login_at")
+  lastLoginIp       String?   @map("last_login_ip") @db.VarChar(45)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  // Relations
+  patient              Patient?
+  psychologist         Psychologist?
+  admin                Admin?
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
+  emailVerifications   EmailVerification[]
+  notifications        Notification[]
+  documents            Document[]
+  auditLogs            AuditLog[]           @relation("UserAuditLogs")
+  performedAudits      AuditLog[]           @relation("PerformedByAuditLogs")
+  supportTickets       SupportTicket[]      @relation("UserTickets")
+  assignedTickets      SupportTicket[]      @relation("AssignedTickets")
+  ticketReplies        TicketReply[]
+  meetingParticipants  MeetingParticipant[]
+  meetingLogs          MeetingLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// ==================================================
+// REFRESH TOKENS
+// ==================================================
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  ip          String?   @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.VarChar(512)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ==================================================
+// PASSWORD RESET TOKENS
+// ==================================================
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
+// ==================================================
+// EMAIL VERIFICATIONS
+// ==================================================
+
+model EmailVerification {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at")
+  verifiedAt  DateTime? @map("verified_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("email_verifications")
+}
+
+// ==================================================
+// PATIENTS
+// ==================================================
+
+model Patient {
+  id                    String    @id @default(uuid()) @db.Uuid
+  userId                String    @unique @map("user_id") @db.Uuid
+  firstName             String    @map("first_name") @db.VarChar(100)
+  lastName              String    @map("last_name") @db.VarChar(100)
+  anonymousName         String?   @map("anonymous_name") @db.VarChar(100)
+  isAnonymous           Boolean   @default(false) @map("is_anonymous")
+  gender                Gender?
+  dateOfBirth           DateTime? @map("date_of_birth") @db.Date
+  phoneNumber           String?   @map("phone_number") @db.VarChar(20)
+  avatarUrl             String?   @map("avatar_url") @db.VarChar(500)
+  timezone              String    @default("UTC") @db.VarChar(100)
+  preferredLanguage     String    @default("fr") @map("preferred_language") @db.VarChar(10)
+  medicalQuestionnaire  Json?     @map("medical_questionnaire")
+  emergencyContact      Json?     @map("emergency_contact")
+  fcmToken              String?   @map("fcm_token") @db.VarChar(512)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments         Appointment[]
+  payments             Payment[]
+  reviews              Review[]
+  favoritePsychologists FavoritePsychologist[]
+  conversations        Conversation[]
+  invoices             Invoice[]
+
+  @@index([userId])
+  @@map("patients")
+}
+
+// ==================================================
+// PSYCHOLOGISTS
+// ==================================================
+
+model Psychologist {
+  id                  String              @id @default(uuid()) @db.Uuid
+  userId              String              @unique @map("user_id") @db.Uuid
+  firstName           String              @map("first_name") @db.VarChar(100)
+  lastName            String              @map("last_name") @db.VarChar(100)
+  biography           String?             @db.Text
+  avatarUrl           String?             @map("avatar_url") @db.VarChar(500)
+  phoneNumber         String?             @map("phone_number") @db.VarChar(20)
+  licenseNumber       String?             @unique @map("license_number") @db.VarChar(100)
+  yearsOfExperience   Int?                @map("years_of_experience")
+  sessionFormats      SessionFormat[]     @map("session_formats")
+  languages           String[]
+  timezone            String              @default("UTC") @db.VarChar(100)
+  pricePerSession     Decimal?            @map("price_per_session") @db.Decimal(10, 2)
+  currency            String              @default("TND") @db.VarChar(3)
+  sessionDurationMins Int                 @default(60) @map("session_duration_mins")
+  status              PsychologistStatus  @default(PENDING_VERIFICATION)
+  vacationMode        Boolean             @default(false) @map("vacation_mode")
+  vacationUntil       DateTime?           @map("vacation_until")
+  rating              Decimal             @default(0) @db.Decimal(3, 2)
+  reviewCount         Int                 @default(0) @map("review_count")
+  fcmToken            String?             @map("fcm_token") @db.VarChar(512)
+  stripeAccountId     String?             @map("stripe_account_id") @db.VarChar(255)
+  isProfileComplete   Boolean             @default(false) @map("is_profile_complete")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialties           PsychologistSpecialty[]
+  certificates          Certificate[]
+  availabilitySlots     AvailabilitySlot[]
+  appointments          Appointment[]
+  reviews               Review[]
+  favoritedByPatients   FavoritePsychologist[]
+  conversations         Conversation[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([rating])
+  @@index([vacationMode])
+  @@map("psychologists")
+}
+
+// ==================================================
+// PSYCHOLOGIST SPECIALTIES
+// ==================================================
+
+model PsychologistSpecialty {
+  id              String   @id @default(uuid()) @db.Uuid
+  psychologistId  String   @map("psychologist_id") @db.Uuid
+  specialty       String   @db.VarChar(100)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@unique([psychologistId, specialty])
+  @@index([psychologistId])
+  @@index([specialty])
+  @@map("psychologist_specialties")
+}
+
+// ==================================================
+// CERTIFICATES
+// ==================================================
+
+model Certificate {
+  id              String            @id @default(uuid()) @db.Uuid
+  psychologistId  String            @map("psychologist_id") @db.Uuid
+  title           String            @db.VarChar(200)
+  issuer          String            @db.VarChar(200)
+  issuedAt        DateTime?         @map("issued_at") @db.Date
+  expiresAt       DateTime?         @map("expires_at") @db.Date
+  fileUrl         String?           @map("file_url") @db.VarChar(500)
+  status          CertificateStatus @default(PENDING)
+  verifiedAt      DateTime?         @map("verified_at")
+  verifiedBy      String?           @map("verified_by") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@index([psychologistId])
+  @@index([status])
+  @@map("certificates")
+}
+
+// ==================================================
+// ADMIN
+// ==================================================
+
+model Admin {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  firstName   String   @map("first_name") @db.VarChar(100)
+  lastName    String   @map("last_name") @db.VarChar(100)
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("admins")
+}
+
+// ==================================================
+// AVAILABILITY SLOTS
+// ==================================================
+
+model AvailabilitySlot {
+  id              String    @id @default(uuid()) @db.Uuid
+  psychologistId  String    @map("psychologist_id") @db.Uuid
+  dayOfWeek       DayOfWeek @map("day_of_week")
+  startTime       String    @map("start_time") @db.VarChar(5)  // "09:00"
+  endTime         String    @map("end_time") @db.VarChar(5)    // "17:00"
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@unique([psychologistId, dayOfWeek, startTime])
+  @@index([psychologistId])
+  @@index([dayOfWeek])
+  @@map("availability_slots")
+}
+
+// ==================================================
+// APPOINTMENTS
+// ==================================================
+
+model Appointment {
+  id              String            @id @default(uuid()) @db.Uuid
+  patientId       String            @map("patient_id") @db.Uuid
+  psychologistId  String            @map("psychologist_id") @db.Uuid
+  startAt         DateTime          @map("start_at")
+  endAt           DateTime          @map("end_at")
+  timezone        String            @db.VarChar(100)
+  status          AppointmentStatus @default(PENDING)
+  sessionFormat   SessionFormat     @default(VIDEO) @map("session_format")
+  price           Decimal           @db.Decimal(10, 2)
+  currency        String            @default("TND") @db.VarChar(3)
+  meetingUrl      String?           @map("meeting_url") @db.VarChar(500)
+  notes           String?           @db.Text
+  cancellationReason String?        @map("cancellation_reason") @db.Text
+  cancelledBy     String?           @map("cancelled_by") @db.Uuid
+  cancelledAt     DateTime?         @map("cancelled_at")
+  reminderSentAt  DateTime?         @map("reminder_sent_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  patient        Patient              @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  psychologist   Psychologist         @relation(fields: [psychologistId], references: [id], onDelete: Restrict)
+  payment        Payment?
+  review         Review?
+  statusHistory  AppointmentHistory[]
+  invoice        Invoice?
+  meetingRoom    MeetingRoom?
+
+  @@index([patientId])
+  @@index([psychologistId])
+  @@index([status])
+  @@index([startAt])
+  @@index([patientId, startAt])
+  @@index([psychologistId, startAt])
+  @@map("appointments")
+}
+
+// ==================================================
+// APPOINTMENT STATUS HISTORY
+// ==================================================
+
+model AppointmentHistory {
+  id            String            @id @default(uuid()) @db.Uuid
+  appointmentId String            @map("appointment_id") @db.Uuid
+  fromStatus    AppointmentStatus @map("from_status")
+  toStatus      AppointmentStatus @map("to_status")
+  changedBy     String            @map("changed_by") @db.Uuid
+  reason        String?           @db.Text
+  changedAt     DateTime          @default(now()) @map("changed_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@map("appointment_history")
+}
+
+// ==================================================
+// PAYMENTS
+// ==================================================
+
+model Payment {
+  id              String          @id @default(uuid()) @db.Uuid
+  appointmentId   String          @unique @map("appointment_id") @db.Uuid
+  patientId       String          @map("patient_id") @db.Uuid
+  provider        PaymentProvider
+  amount          Decimal         @db.Decimal(10, 2)
+  currency        String          @default("TND") @db.VarChar(3)
+  status          PaymentStatus   @default(PENDING)
+  providerRef     String?         @map("provider_ref") @db.VarChar(255)
+  providerMetadata Json?          @map("provider_metadata")
+  failureReason   String?         @map("failure_reason") @db.Text
+  paidAt          DateTime?       @map("paid_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  invoice     Invoice?
+  refunds     Refund[]
+
+  @@index([appointmentId])
+  @@index([patientId])
+  @@index([status])
+  @@index([provider])
+  @@map("payments")
+}
+
+// ==================================================
+// INVOICES
+// ==================================================
+
+model Invoice {
+  id            String   @id @default(uuid()) @db.Uuid
+  paymentId     String   @unique @map("payment_id") @db.Uuid
+  patientId     String   @map("patient_id") @db.Uuid
+  appointmentId String   @unique @map("appointment_id") @db.Uuid
+  invoiceNumber String   @unique @map("invoice_number") @db.VarChar(50)
+  pdfUrl        String?  @map("pdf_url") @db.VarChar(500)
+  subtotal      Decimal  @db.Decimal(10, 2)
+  tax           Decimal  @default(0) @db.Decimal(10, 2)
+  total         Decimal  @db.Decimal(10, 2)
+  currency      String   @default("TND") @db.VarChar(3)
+  issuedAt      DateTime @default(now()) @map("issued_at")
+  dueAt         DateTime? @map("due_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  payment     Payment     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  @@index([patientId])
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+// ==================================================
+// REFUNDS
+// ==================================================
+
+model Refund {
+  id          String       @id @default(uuid()) @db.Uuid
+  paymentId   String       @map("payment_id") @db.Uuid
+  amount      Decimal      @db.Decimal(10, 2)
+  reason      String?      @db.Text
+  status      RefundStatus @default(PENDING)
+  providerRef String?      @map("provider_ref") @db.VarChar(255)
+  processedAt DateTime?    @map("processed_at")
+  processedBy String?      @map("processed_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId])
+  @@index([status])
+  @@map("refunds")
+}
+
+// ==================================================
+// CONVERSATIONS
+// ==================================================
+
+model Conversation {
+  id              String    @id @default(uuid()) @db.Uuid
+  patientId       String    @map("patient_id") @db.Uuid
+  psychologistId  String    @map("psychologist_id") @db.Uuid
+  lastMessageAt   DateTime? @map("last_message_at")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Restrict)
+  messages     Message[]
+
+  @@unique([patientId, psychologistId])
+  @@index([patientId])
+  @@index([psychologistId])
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+// ==================================================
+// MESSAGES
+// ==================================================
+
+model Message {
+  id              String      @id @default(uuid()) @db.Uuid
+  conversationId  String      @map("conversation_id") @db.Uuid
+  senderId        String      @map("sender_id") @db.Uuid
+  content         String?     @db.Text
+  type            MessageType @default(TEXT)
+  readAt          DateTime?   @map("read_at")
+  isDeleted       Boolean     @default(false) @map("is_deleted")
+  deletedAt       DateTime?   @map("deleted_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  MessageAttachment[]
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ==================================================
+// MESSAGE ATTACHMENTS
+// ==================================================
+
+model MessageAttachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  messageId   String   @map("message_id") @db.Uuid
+  url         String   @db.VarChar(500)
+  filename    String   @db.VarChar(255)
+  mimeType    String   @map("mime_type") @db.VarChar(100)
+  sizeBytes   Int      @map("size_bytes")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_attachments")
+}
+
+// ==================================================
+// REVIEWS
+// ==================================================
+
+model Review {
+  id              String   @id @default(uuid()) @db.Uuid
+  patientId       String   @map("patient_id") @db.Uuid
+  psychologistId  String   @map("psychologist_id") @db.Uuid
+  appointmentId   String   @unique @map("appointment_id") @db.Uuid
+  rating          Int      // 1-5
+  comment         String?  @db.Text
+  isAnonymous     Boolean  @default(false) @map("is_anonymous")
+  isVisible       Boolean  @default(true) @map("is_visible")
+  moderatedAt     DateTime? @map("moderated_at")
+  moderatedBy     String?  @map("moderated_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Restrict)
+  appointment  Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  @@index([patientId])
+  @@index([psychologistId])
+  @@index([rating])
+  @@map("reviews")
+}
+
+// ==================================================
+// FAVORITE PSYCHOLOGISTS
+// ==================================================
+
+model FavoritePsychologist {
+  id              String   @id @default(uuid()) @db.Uuid
+  patientId       String   @map("patient_id") @db.Uuid
+  psychologistId  String   @map("psychologist_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, psychologistId])
+  @@index([patientId])
+  @@map("favorite_psychologists")
+}
+
+// ==================================================
+// NOTIFICATIONS
+// ==================================================
+
+model Notification {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  type      NotificationType
+  channel   NotificationChannel @default(IN_APP)
+  title     String              @db.VarChar(200)
+  body      String              @db.Text
+  data      Json?
+  isRead    Boolean             @default(false) @map("is_read")
+  readAt    DateTime?           @map("read_at")
+  sentAt    DateTime?           @map("sent_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([type])
+  @@map("notifications")
+}
+
+// ==================================================
+// DOCUMENTS
+// ==================================================
+
+model Document {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  filename    String   @db.VarChar(255)
+  originalName String  @map("original_name") @db.VarChar(255)
+  url         String   @db.VarChar(500)
+  mimeType    String   @map("mime_type") @db.VarChar(100)
+  sizeBytes   Int      @map("size_bytes")
+  isPublic    Boolean  @default(false) @map("is_public")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("documents")
+}
+
+// ==================================================
+// SUPPORT TICKETS
+// ==================================================
+
+model SupportTicket {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  subject      String         @db.VarChar(255)
+  body         String         @db.Text
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(MEDIUM)
+  assigneeId   String?        @map("assignee_id") @db.Uuid
+  resolvedAt   DateTime?      @map("resolved_at")
+  closedAt     DateTime?      @map("closed_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  user     User          @relation("UserTickets", fields: [userId], references: [id], onDelete: Restrict)
+  assignee User?         @relation("AssignedTickets", fields: [assigneeId], references: [id], onDelete: SetNull)
+  replies  TicketReply[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+  @@index([assigneeId])
+  @@map("support_tickets")
+}
+
+// ==================================================
+// TICKET REPLIES
+// ==================================================
+
+model TicketReply {
+  id        String   @id @default(uuid()) @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId])
+  @@map("ticket_replies")
+}
+
+// ==================================================
+// AUDIT LOGS
+// ==================================================
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String?     @map("user_id") @db.Uuid
+  performedBy String?     @map("performed_by") @db.Uuid
+  action      AuditAction
+  resource    String      @db.VarChar(100)
+  resourceId  String?     @map("resource_id") @db.Uuid
+  ip          String?     @db.VarChar(45)
+  userAgent   String?     @map("user_agent") @db.VarChar(512)
+  metadata    Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  user        User? @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: SetNull)
+  performer   User? @relation("PerformedByAuditLogs", fields: [performedBy], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([performedBy])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==================================================
+// JITSI VIDEO CONSULTATION TABLES
+// ==================================================
+
+enum MeetingRoomStatus {
+  ACTIVE
+  EXPIRED
+  DESTROYED
+}
+
+model MeetingRoom {
+  id             String            @id @default(uuid()) @db.Uuid
+  appointmentId  String            @unique @map("appointment_id") @db.Uuid
+  roomName       String            @unique @map("room_name") @db.VarChar(100)
+  password       String?           @db.VarChar(100)
+  status         MeetingRoomStatus @default(ACTIVE)
+  expiresAt      DateTime          @map("expires_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  appointment  Appointment          @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  participants MeetingParticipant[]
+  history      MeetingHistory[]
+  logs         MeetingLog[]
+
+  @@index([roomName])
+  @@index([status])
+  @@map("meeting_rooms")
+}
+
+model MeetingParticipant {
+  id            String    @id @default(uuid()) @db.Uuid
+  meetingRoomId String    @map("meeting_room_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  role          String    @db.VarChar(50) // "moderator" | "participant"
+  joinedAt      DateTime  @default(now()) @map("joined_at")
+  leftAt        DateTime? @map("left_at")
+
+  meetingRoom MeetingRoom @relation(fields: [meetingRoomId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingRoomId, userId])
+  @@index([meetingRoomId])
+  @@index([userId])
+  @@map("meeting_participants")
+}
+
+model MeetingHistory {
+  id            String    @id @default(uuid()) @db.Uuid
+  meetingRoomId String    @map("meeting_room_id") @db.Uuid
+  startedAt     DateTime  @map("started_at")
+  endedAt       DateTime? @map("ended_at")
+  durationSecs  Int?      @map("duration_secs")
+
+  meetingRoom MeetingRoom @relation(fields: [meetingRoomId], references: [id], onDelete: Cascade)
+
+  @@index([meetingRoomId])
+  @@map("meeting_history")
+}
+
+model MeetingLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  meetingRoomId String   @map("meeting_room_id") @db.Uuid
+  eventType     String   @map("event_type") @db.VarChar(100) // "join", "leave", "mute", "share_screen"
+  userId        String?  @map("user_id") @db.Uuid
+  details       Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  meetingRoom MeetingRoom @relation(fields: [meetingRoomId], references: [id], onDelete: Cascade)
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([meetingRoomId])
+  @@index([eventType])
+  @@map("meeting_logs")
+}
+

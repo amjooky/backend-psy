@@ -13,14 +13,18 @@ import {
   SetVacationModeDto,
   UpdateAvailabilityDto,
   PsychologistQueryDto,
+  CreateAvailabilityExceptionDto,
 } from './dto/psychologist.dto';
 import { CACHE_KEYS } from '../../common/constants/app.constants';
+import { CertificateStatus, NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PsychologistsService {
   constructor(
     private readonly psychologistsRepository: PsychologistsRepository,
     private readonly redisService: RedisService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // ─── Public ──────────────────────────────────────────────────
@@ -112,6 +116,35 @@ export class PsychologistsService {
     return { message: 'Certificate deleted' };
   }
 
+  async updateCertificateStatus(adminUserId: string, certificateId: string, status: CertificateStatus) {
+    const certificate = await this.psychologistsRepository.updateCertificateStatus(
+      certificateId,
+      status,
+      adminUserId,
+    );
+
+    const psychologist = await this.psychologistsRepository.findById(certificate.psychologistId);
+    if (psychologist) {
+      await this.notificationsService.createInAppNotification(
+        psychologist.user.id,
+        status === CertificateStatus.VERIFIED ? 'Certificat approuve' : 'Certificat rejete',
+        status === CertificateStatus.VERIFIED
+          ? `Votre certificat "${certificate.title}" a ete approuve par l'administration.`
+          : `Votre certificat "${certificate.title}" a ete rejete. Merci de verifier le document soumis.`,
+        NotificationType.DOCUMENT_UPLOADED,
+        { certificateId: certificate.id, status },
+      );
+    }
+
+    return {
+      message:
+        status === CertificateStatus.VERIFIED
+          ? 'Certificate approved successfully'
+          : 'Certificate rejected successfully',
+      certificate,
+    };
+  }
+
   // ─── Availability ─────────────────────────────────────────────
 
   async updateAvailability(userId: string, dto: UpdateAvailabilityDto) {
@@ -134,6 +167,36 @@ export class PsychologistsService {
     await this.redisService.deletePattern(`slots:${psy.id}:*`);
 
     return { message: 'Availability updated', slots: dto.slots };
+  }
+
+  async listAvailabilityExceptions(userId: string) {
+    const psy = await this.psychologistsRepository.findByUserId(userId);
+    if (!psy) throw new NotFoundException('Psychologist profile not found');
+    return this.psychologistsRepository.listAvailabilityExceptions(psy.id);
+  }
+
+  async createAvailabilityException(userId: string, dto: CreateAvailabilityExceptionDto) {
+    const psy = await this.psychologistsRepository.findByUserId(userId);
+    if (!psy) throw new NotFoundException('Psychologist profile not found');
+
+    const exception = await this.psychologistsRepository.createAvailabilityException(
+      psy.id,
+      new Date(dto.date),
+      dto.reason,
+    );
+    await this.redisService.deletePattern(`slots:${psy.id}:*`);
+
+    return exception;
+  }
+
+  async deleteAvailabilityException(userId: string, exceptionId: string) {
+    const psy = await this.psychologistsRepository.findByUserId(userId);
+    if (!psy) throw new NotFoundException('Psychologist profile not found');
+
+    await this.psychologistsRepository.deleteAvailabilityException(exceptionId, psy.id);
+    await this.redisService.deletePattern(`slots:${psy.id}:*`);
+
+    return { message: 'Availability exception deleted' };
   }
 
   // ─── Vacation Mode ────────────────────────────────────────────

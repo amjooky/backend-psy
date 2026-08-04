@@ -25,6 +25,13 @@ const reviewSelect = {
       anonymousName: true,
     },
   },
+  psychologist: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+    },
+  },
 } satisfies Prisma.ReviewSelect;
 
 export type ReviewWithDetails = Prisma.ReviewGetPayload<{
@@ -88,5 +95,21 @@ export class ReviewsRepository {
       data,
       select: reviewSelect,
     });
+  }
+
+  async findAll(page: number, limit: number): Promise<PaginatedResponseDto<ReviewWithDetails>> {
+    const { skip, take } = getPaginationParams(page, limit);
+
+    const [data, total] = await Promise.all([
+      this.prisma.review.findMany({
+        select: reviewSelect,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.review.count(),
+    ]);
+
+    return paginate(data, total, page, limit);
   }
 }

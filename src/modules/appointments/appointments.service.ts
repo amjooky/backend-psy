@@ -78,6 +78,19 @@ export class AppointmentsService {
       throw new BadRequestException('Chosen time is outside the psychologist weekly working hours.');
     }
 
+    const exception = await this.prisma.availabilityException.findFirst({
+      where: {
+        psychologistId: psychologist.id,
+        date: {
+          gte: targetLocalTime.startOf('day').toJSDate(),
+          lte: targetLocalTime.endOf('day').toJSDate(),
+        },
+      },
+    });
+    if (exception) {
+      throw new BadRequestException('Psychologist is unavailable on this date.');
+    }
+
     // Check conflict
     const hasConflict = await this.appointmentsRepository.findConflicting(
       psychologist.id,

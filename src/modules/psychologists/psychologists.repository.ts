@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, PsychologistStatus } from '@prisma/client';
+import { Prisma, PsychologistStatus, CertificateStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PaginatedResponseDto } from '../../common/dto/pagination.dto';
 import { getPaginationParams, paginate } from '../../common/utils/pagination.util';
@@ -61,6 +61,15 @@ const psychologistSelect = {
     },
     orderBy: { dayOfWeek: 'asc' as const },
   },
+  availabilityExceptions: {
+    select: {
+      id: true,
+      date: true,
+      reason: true,
+      createdAt: true,
+    },
+    orderBy: { date: 'asc' as const },
+  },
 } satisfies Prisma.PsychologistSelect;
 
 export type PsychologistWithDetails = Prisma.PsychologistGetPayload<{
@@ -111,11 +120,25 @@ export class PsychologistsRepository {
           : { status: PsychologistStatus.ACTIVE }),
       ...(isAdmin ? {} : { vacationMode: false }),
       ...(query.search && {
-        OR: [
-          { firstName: { contains: query.search, mode: 'insensitive' } },
-          { lastName: { contains: query.search, mode: 'insensitive' } },
-          { biography: { contains: query.search, mode: 'insensitive' } },
-        ],
+        AND: query.search
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter(Boolean)
+          .map((token) => ({
+            OR: [
+              { firstName: { contains: token, mode: 'insensitive' } },
+              { lastName: { contains: token, mode: 'insensitive' } },
+              { biography: { contains: token, mode: 'insensitive' } },
+              { languages: { has: token } },
+              {
+                specialties: {
+                  some: {
+                    specialty: { contains: token, mode: 'insensitive' },
+                  },
+                },
+              },
+            ],
+          })),
       }),
       ...(query.specialty && {
         specialties: { some: { specialty: { contains: query.specialty, mode: 'insensitive' } } },
@@ -181,6 +204,21 @@ export class PsychologistsRepository {
     await this.prisma.certificate.deleteMany({ where: { id, psychologistId } });
   }
 
+  async updateCertificateStatus(
+    id: string,
+    status: CertificateStatus,
+    verifiedBy: string,
+  ) {
+    return this.prisma.certificate.update({
+      where: { id },
+      data: {
+        status,
+        verifiedBy,
+        verifiedAt: status === CertificateStatus.VERIFIED ? new Date() : null,
+      },
+    });
+  }
+
   async upsertAvailability(
     psychologistId: string,
     slots: Array<{ dayOfWeek: string; startTime: string; endTime: string }>,
@@ -197,6 +235,25 @@ export class PsychologistsRepository {
         })),
       }),
     ]);
+  }
+
+  async listAvailabilityExceptions(psychologistId: string) {
+    return this.prisma.availabilityException.findMany({
+      where: { psychologistId },
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  async createAvailabilityException(psychologistId: string, date: Date, reason?: string) {
+    return this.prisma.availabilityException.create({
+      data: { psychologistId, date, reason },
+    });
+  }
+
+  async deleteAvailabilityException(id: string, psychologistId: string) {
+    await this.prisma.availabilityException.deleteMany({
+      where: { id, psychologistId },
+    });
   }
 
   async updateRating(psychologistId: string): Promise<void> {

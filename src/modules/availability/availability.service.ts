@@ -58,6 +58,19 @@ export class AvailabilityService {
       }
     }
 
+    const exception = await this.prisma.availabilityException.findFirst({
+      where: {
+        psychologistId,
+        date: {
+          gte: targetDate.startOf('day').toJSDate(),
+          lte: targetDate.endOf('day').toJSDate(),
+        },
+      },
+    });
+    if (exception) {
+      return [];
+    }
+
     // Determine DayOfWeek
     const weekdayMap: Record<number, DayOfWeek> = {
       1: DayOfWeek.MONDAY,

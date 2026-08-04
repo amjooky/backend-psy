@@ -4,9 +4,12 @@ import {
   Body,
   UseGuards,
   Get,
+  Param,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
+import { InvoiceService } from './invoice.service';
 import { InitiatePaymentDto, VerifyPaymentDto, RequestRefundDto } from './dto/payment.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -20,7 +23,10 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly invoiceService: InvoiceService,
+  ) {}
 
   @Post('initiate')
   @Roles(UserRole.PATIENT)
@@ -49,5 +55,26 @@ export class PaymentsController {
   @ApiOperation({ summary: 'List patient invoice histories' })
   async getInvoices(@CurrentUser('sub') userId: string) {
     return this.paymentsService.getInvoices(userId);
+  }
+
+  @Get('invoices/:id/pdf')
+  @Roles(UserRole.PATIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Generate or get invoice PDF' })
+  async getInvoicePdf(@Param('id', ParseUUIDPipe) invoiceId: string) {
+    return { url: await this.invoiceService.getOrGenerateInvoicePdf(invoiceId) };
+  }
+
+  @Get('admin/all-invoices')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List all invoices for admin moderation and export' })
+  async getAllInvoices() {
+    return this.paymentsService.getAllInvoices();
+  }
+
+  @Post('invoices/:id/regenerate-pdf')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Regenerate invoice PDF (admin only)' })
+  async regenerateInvoicePdf(@Param('id', ParseUUIDPipe) invoiceId: string) {
+    return { url: await this.invoiceService.regenerateInvoicePdf(invoiceId) };
   }
 }

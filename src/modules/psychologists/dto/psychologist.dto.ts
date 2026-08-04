@@ -159,6 +159,25 @@ export class UpdateAvailabilityDto {
   slots!: AvailabilitySlotDto[];
 }
 
+export class CreateAvailabilityExceptionDto {
+  @ApiProperty({ example: '2026-08-20' })
+  @IsDateString()
+  date!: string;
+
+  @ApiPropertyOptional({ example: 'Conges annuels' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  reason?: string;
+}
+
+export class UpdateCertificateStatusDto {
+  @ApiProperty({ enum: ['VERIFIED', 'REJECTED'] })
+  @IsString()
+  @IsNotEmpty()
+  status!: 'VERIFIED' | 'REJECTED';
+}
+
 export class PsychologistQueryDto {
   @ApiPropertyOptional()
   @IsOptional()

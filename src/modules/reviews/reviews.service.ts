@@ -70,4 +70,25 @@ export class ReviewsService {
     }
     return this.reviewsRepository.findAllByPsychologist(psychologistId, page, limit);
   }
+
+  async getAllReviews(page: number, limit: number) {
+    return this.reviewsRepository.findAll(page, limit);
+  }
+
+  async updateVisibility(adminUserId: string, reviewId: string, isVisible: boolean) {
+    const review = await this.reviewsRepository.findById(reviewId);
+    if (!review) {
+      throw new NotFoundException('Review not found.');
+    }
+
+    const updated = await this.reviewsRepository.update(reviewId, {
+      isVisible,
+      moderatedAt: new Date(),
+      moderatedBy: adminUserId,
+    });
+
+    await this.psychologistsRepository.updateRating(review.psychologistId);
+
+    return updated;
+  }
 }

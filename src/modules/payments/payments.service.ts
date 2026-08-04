@@ -4,17 +4,22 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentFactory } from './payment.factory';
 import { InitiatePaymentDto, VerifyPaymentDto, RequestRefundDto } from './dto/payment.dto';
 import { AppointmentStatus, PaymentStatus, RefundStatus, Prisma } from '@prisma/client';
+import { InvoiceService } from './invoice.service';
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentFactory: PaymentFactory,
+    private readonly invoiceService: InvoiceService,
   ) {}
 
   async initiate(userId: string, dto: InitiatePaymentDto) {
@@ -84,7 +89,7 @@ export class PaymentsService {
         // Auto-generate invoice
         const count = await tx.invoice.count();
         const invoiceNum = `INV-${new Date().getFullYear()}-${1000 + count + 1}`;
-        await tx.invoice.create({
+        const invoice = await tx.invoice.create({
           data: {
             payment: { connect: { id: payment.id } },
             patient: { connect: { id: appointment.patientId } },
@@ -94,6 +99,11 @@ export class PaymentsService {
             total: new Prisma.Decimal(amount),
             currency: appointment.currency,
           },
+        });
+
+        // Generate PDF invoice (async, non-blocking)
+        this.invoiceService.generateInvoicePdf(invoice.id).catch((error) => {
+          this.logger.error(`Failed to generate invoice PDF: ${error.message}`);
         });
       });
 
@@ -174,7 +184,7 @@ export class PaymentsService {
         // Auto-generate invoice
         const count = await tx.invoice.count();
         const invoiceNum = `INV-${new Date().getFullYear()}-${1000 + count + 1}`;
-        await tx.invoice.create({
+        const invoice = await tx.invoice.create({
           data: {
             payment: { connect: { id: payment.id } },
             patient: { connect: { id: payment.patientId } },
@@ -184,6 +194,11 @@ export class PaymentsService {
             total: payment.amount,
             currency: payment.currency,
           },
+        });
+
+        // Generate PDF invoice (async, non-blocking)
+        this.invoiceService.generateInvoicePdf(invoice.id).catch((error) => {
+          this.logger.error(`Failed to generate invoice PDF: ${error.message}`);
         });
       });
 
@@ -264,7 +279,41 @@ export class PaymentsService {
   async getInvoices(userId: string) {
     return this.prisma.invoice.findMany({
       where: { patient: { userId } },
-      include: { appointment: true },
+      include: {
+        appointment: {
+          include: {
+            psychologist: {
+              select: { firstName: true, lastName: true },
+            },
+          },
+        },
+        payment: true,
+      },
+      orderBy: { issuedAt: 'desc' },
+    });
+  }
+
+  async getAllInvoices() {
+    return this.prisma.invoice.findMany({
+      include: {
+        payment: true,
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            anonymousName: true,
+            isAnonymous: true,
+          },
+        },
+        appointment: {
+          include: {
+            psychologist: {
+              select: { firstName: true, lastName: true },
+            },
+          },
+        },
+      },
+      orderBy: { issuedAt: 'desc' },
     });
   }
 }

@@ -29,6 +29,8 @@ import {
   SetVacationModeDto,
   UpdateAvailabilityDto,
   PsychologistQueryDto,
+  CreateAvailabilityExceptionDto,
+  UpdateCertificateStatusDto,
 } from './dto/psychologist.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -138,6 +140,41 @@ export class PsychologistsController {
     return this.psychologistsService.updateAvailability(userId, dto);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PSYCHOLOGIST)
+  @Get('me/availability-exceptions')
+  @ApiOperation({ summary: 'List own availability exception dates' })
+  async listAvailabilityExceptions(@CurrentUser('sub') userId: string) {
+    return this.psychologistsService.listAvailabilityExceptions(userId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PSYCHOLOGIST)
+  @Post('me/availability-exceptions')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create an availability exception date' })
+  async createAvailabilityException(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: CreateAvailabilityExceptionDto,
+  ) {
+    return this.psychologistsService.createAvailabilityException(userId, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PSYCHOLOGIST)
+  @Delete('me/availability-exceptions/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete an availability exception date' })
+  async deleteAvailabilityException(
+    @CurrentUser('sub') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.psychologistsService.deleteAvailabilityException(userId, id);
+  }
+
   // ─── Vacation Mode ────────────────────────────────────────────
 
   @ApiBearerAuth()
@@ -154,6 +191,20 @@ export class PsychologistsController {
   }
 
   // ─── Admin Endpoints ─────────────────────────────────────────
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Patch('admin/certificates/:id/status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[ADMIN] Approve or reject a psychologist certificate' })
+  async updateCertificateStatus(
+    @CurrentUser('sub') adminUserId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCertificateStatusDto,
+  ) {
+    return this.psychologistsService.updateCertificateStatus(adminUserId, id, dto.status as any);
+  }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)

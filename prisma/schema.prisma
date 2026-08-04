@@ -345,6 +345,7 @@ model Psychologist {
   specialties           PsychologistSpecialty[]
   certificates          Certificate[]
   availabilitySlots     AvailabilitySlot[]
+  availabilityExceptions AvailabilityException[]
   appointments          Appointment[]
   reviews               Review[]
   favoritedByPatients   FavoritePsychologist[]
@@ -439,6 +440,26 @@ model AvailabilitySlot {
   @@index([psychologistId])
   @@index([dayOfWeek])
   @@map("availability_slots")
+}
+
+// ==================================================
+// AVAILABILITY EXCEPTIONS
+// ==================================================
+
+model AvailabilityException {
+  id              String   @id @default(uuid()) @db.Uuid
+  psychologistId  String   @map("psychologist_id") @db.Uuid
+  date            DateTime @db.Date
+  reason          String?  @db.VarChar(255)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@unique([psychologistId, date])
+  @@index([psychologistId])
+  @@index([date])
+  @@map("availability_exceptions")
 }
 
 // ==================================================

@@ -1,4 +1,5 @@
 import {
+  Patch,
   Controller,
   Post,
   Body,
@@ -18,6 +19,14 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsBoolean } from 'class-validator';
+
+class UpdateReviewVisibilityDto {
+  @ApiProperty()
+  @IsBoolean()
+  isVisible!: boolean;
+}
 
 @ApiTags('Reviews')
 @Controller()
@@ -41,5 +50,27 @@ export class ReviewsController {
     @Query() query: PaginationDto,
   ) {
     return this.reviewsService.getPsychologistReviews(id, query.page, query.limit);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Get('reviews/admin')
+  @ApiOperation({ summary: '[ADMIN] List all reviews for moderation' })
+  async listAllReviews(@Query() query: PaginationDto) {
+    return this.reviewsService.getAllReviews(query.page, query.limit);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Patch('reviews/admin/:id/visibility')
+  @ApiOperation({ summary: '[ADMIN] Toggle review visibility' })
+  async updateVisibility(
+    @CurrentUser('sub') adminUserId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateReviewVisibilityDto,
+  ) {
+    return this.reviewsService.updateVisibility(adminUserId, id, dto.isVisible);
   }
 }

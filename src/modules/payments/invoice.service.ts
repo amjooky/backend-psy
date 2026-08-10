@@ -384,8 +384,9 @@ export class InvoiceService {
 
       this.logger.log(`Invoice PDF generated: ${filename}`);
       return url;
-    } catch (error) {
-      this.logger.error(`Failed to generate invoice PDF: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to generate invoice PDF: ${message}`);
       throw error;
     }
   }
@@ -403,8 +404,9 @@ export class InvoiceService {
         if (urlParts.length > 1) {
           await this.documentsService.deleteFile(`invoices/${urlParts[1]}`);
         }
-      } catch (error) {
-        this.logger.warn(`Failed to delete existing PDF: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(`Failed to delete existing PDF: ${message}`);
       }
     }
 

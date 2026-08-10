@@ -5,8 +5,6 @@ import { ConfigService } from '@nestjs/config';
 import { QUEUE_NAMES } from '../../common/constants/app.constants';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationType, NotificationChannel } from '@prisma/client';
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
 import { MessagingGateway } from '../messaging/messaging.gateway';
 
 export interface EmailJobData {
@@ -32,7 +30,7 @@ export interface SmsJobData {
 export class NotificationsService implements OnModuleInit {
   private readonly logger = new Logger(NotificationsService.name);
   private fcmInitialized = false;
-  private firebaseApp: App | null = null;
+  private firebaseApp: any = null;
 
   constructor(
     @InjectQueue(QUEUE_NAMES.EMAIL) private readonly emailQueue: Queue,
@@ -41,55 +39,48 @@ export class NotificationsService implements OnModuleInit {
     private readonly config: ConfigService,
     @Inject(forwardRef(() => MessagingGateway))
     private readonly messagingGateway?: MessagingGateway,
-  ) {}
+  ) { }
 
   onModuleInit() {
     const projectId = this.config.get<string>('FCM_PROJECT_ID');
     const clientEmail = this.config.get<string>('FCM_CLIENT_EMAIL');
     const privateKey = this.config.get<string>('FCM_PRIVATE_KEY');
 
-    if (
-      projectId &&
-      clientEmail &&
-      privateKey &&
-      !projectId.startsWith('your-') &&
-      !getApps().length
-    ) {
-      try {
-        this.firebaseApp = initializeApp({
-          credential: cert({
-            projectId,
-            clientEmail,
-            privateKey: privateKey.replace(/\\n/g, '\n'),
-          }),
-        });
-        this.fcmInitialized = true;
-        this.logger.log('Firebase Admin SDK initialized (FCM ready)');
-      } catch (err: any) {
-        this.logger.warn(`Firebase Admin init failed: ${err.message}`);
+      const adminApp = (() => { try { return require('firebase-admin/app'); } catch { return null; } })();
+      const initializeAppFn = adminApp?.initializeApp;
+      const getAppsFn = adminApp?.getApps ?? (() => [] as any[]);
+      const certFn = adminApp?.cert;
+
+      if (
+        projectId &&
+        clientEmail &&
+        privateKey &&
+        !projectId.startsWith('your-') &&
+        initializeAppFn &&
+        getAppsFn().length === 0
+      ) {
+        try {
+          this.firebaseApp = initializeAppFn({
+            credential: certFn({
+              projectId,
+              clientEmail,
+              privateKey: privateKey.replace(/\\n/g, '\n'),
+            }),
+          });
+          this.fcmInitialized = true;
+          this.logger.log('Firebase Admin SDK initialized (FCM ready)');
+        } catch (err: any) {
+          this.logger.warn(`Firebase Admin init failed: ${err.message}`);
+        }
+      } else {
+        this.logger.warn(
+          'FCM credentials not configured — push notifications are disabled. Set FCM_PROJECT_ID, FCM_CLIENT_EMAIL, FCM_PRIVATE_KEY in .env to enable.',
+        );
       }
-    } else {
-      this.logger.warn(
-        'FCM credentials not configured — push notifications are disabled. Set FCM_PROJECT_ID, FCM_CLIENT_EMAIL, FCM_PRIVATE_KEY in .env to enable.',
-      );
-    }
   }
 
   // ─── Email ───────────────────────────────────────────────────
 
-  async sendEmail(
-    to: string,
-    subject: string,
-    template: string,
-    context: Record<string, any>,
-  ): Promise<void> {
-    await this.emailQueue.add(
-      'send',
-      { to, subject, template, context } as EmailJobData,
-      { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
-    );
-    this.logger.debug(`Queued email to ${to} with template ${template}`);
-  }
 
   async getNotificationsForUser(userId: string) {
     return this.prisma.notification.findMany({
@@ -152,6 +143,20 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
+  async sendEmail(to: string, subject: string, template: string, context: Record<string, any>): Promise<void> {
+    await this.emailQueue.add('send', {
+      to,
+      subject,
+      template,
+      context,
+    } as EmailJobData, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+    });
+    this.logger.debug(`Queued email to ${to} with template ${template}`);
+  }
+
   // ─── FCM Push ────────────────────────────────────────────────
 
   /**
@@ -170,6 +175,7 @@ export class NotificationsService implements OnModuleInit {
     }
 
     try {
+      const { getMessaging } = require('firebase-admin/messaging');
       const messaging = getMessaging(this.firebaseApp!);
       const result = await messaging.send({
         token,

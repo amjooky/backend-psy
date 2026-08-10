@@ -40,14 +40,26 @@ async function bootstrap() {
 
   // ─── CORS ───────────────────────────────────────────────────
   app.enableCors({
-    origin: [...corsOrigins, frontendUrl].filter(Boolean),
+    origin: (requestOrigin, callback) => {
+      if (!requestOrigin) {
+        callback(null, true);
+        return;
+      }
+      const allowedOrigins = [...corsOrigins, frontendUrl].filter(Boolean);
+      const isAllowed = allowedOrigins.some((origin) => {
+        if (origin === requestOrigin) return true;
+        if (origin.replace(/\/$/, '') === requestOrigin.replace(/\/$/, '')) return true;
+        return false;
+      });
+
+      if (isAllowed || requestOrigin.endsWith('.educanet.pro') || nodeEnv !== 'production') {
+        callback(null, true);
+      } else {
+        logger.warn(`CORS blocked for origin: ${requestOrigin}`);
+        callback(null, false);
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Request-Id',
-      'Accept-Language',
-    ],
     credentials: true,
     maxAge: 86400, // 24 hours preflight cache
   });

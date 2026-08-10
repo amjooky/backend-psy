@@ -102,8 +102,9 @@ export class PaymentsService {
         });
 
         // Generate PDF invoice (async, non-blocking)
-        this.invoiceService.generateInvoicePdf(invoice.id).catch((error) => {
-          this.logger.error(`Failed to generate invoice PDF: ${error.message}`);
+        this.invoiceService.generateInvoicePdf(invoice.id).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          this.logger.error(`Failed to generate invoice PDF: ${message}`);
         });
       });
 
@@ -197,8 +198,9 @@ export class PaymentsService {
         });
 
         // Generate PDF invoice (async, non-blocking)
-        this.invoiceService.generateInvoicePdf(invoice.id).catch((error) => {
-          this.logger.error(`Failed to generate invoice PDF: ${error.message}`);
+        this.invoiceService.generateInvoicePdf(invoice.id).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          this.logger.error(`Failed to generate invoice PDF: ${message}`);
         });
       });
 

@@ -34,6 +34,7 @@ import { JitsiModule } from './modules/jitsi/jitsi.module';
     // ─── Core Config ─────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
       load: [configuration],
       validationSchema,
       validationOptions: {

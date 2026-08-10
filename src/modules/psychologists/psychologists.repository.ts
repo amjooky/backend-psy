@@ -61,15 +61,6 @@ const psychologistSelect = {
     },
     orderBy: { dayOfWeek: 'asc' as const },
   },
-  availabilityExceptions: {
-    select: {
-      id: true,
-      date: true,
-      reason: true,
-      createdAt: true,
-    },
-    orderBy: { date: 'asc' as const },
-  },
 } satisfies Prisma.PsychologistSelect;
 
 export type PsychologistWithDetails = Prisma.PsychologistGetPayload<{
@@ -238,20 +229,20 @@ export class PsychologistsRepository {
   }
 
   async listAvailabilityExceptions(psychologistId: string) {
-    return this.prisma.availabilityException.findMany({
+    return (this.prisma as any).availabilityException.findMany({
       where: { psychologistId },
       orderBy: { date: 'asc' },
     });
   }
 
   async createAvailabilityException(psychologistId: string, date: Date, reason?: string) {
-    return this.prisma.availabilityException.create({
+    return (this.prisma as any).availabilityException.create({
       data: { psychologistId, date, reason },
     });
   }
 
   async deleteAvailabilityException(id: string, psychologistId: string) {
-    await this.prisma.availabilityException.deleteMany({
+    await (this.prisma as any).availabilityException.deleteMany({
       where: { id, psychologistId },
     });
   }

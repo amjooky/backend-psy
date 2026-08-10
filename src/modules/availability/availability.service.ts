@@ -58,7 +58,7 @@ export class AvailabilityService {
       }
     }
 
-    const exception = await this.prisma.availabilityException.findFirst({
+    const exception = await (this.prisma as any).availabilityException.findFirst({
       where: {
         psychologistId,
         date: {

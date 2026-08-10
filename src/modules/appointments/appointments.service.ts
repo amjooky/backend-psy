@@ -26,7 +26,7 @@ export class AppointmentsService {
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   async bookAppointment(userId: string, dto: BookAppointmentDto) {
     const patient = await this.prisma.patient.findUnique({
@@ -78,19 +78,6 @@ export class AppointmentsService {
       throw new BadRequestException('Chosen time is outside the psychologist weekly working hours.');
     }
 
-    const exception = await this.prisma.availabilityException.findFirst({
-      where: {
-        psychologistId: psychologist.id,
-        date: {
-          gte: targetLocalTime.startOf('day').toJSDate(),
-          lte: targetLocalTime.endOf('day').toJSDate(),
-        },
-      },
-    });
-    if (exception) {
-      throw new BadRequestException('Psychologist is unavailable on this date.');
-    }
-
     // Check conflict
     const hasConflict = await this.appointmentsRepository.findConflicting(
       psychologist.id,
@@ -126,6 +113,21 @@ export class AppointmentsService {
     // Clear availability cache for that date
     const dateStr = targetLocalTime.toFormat('YYYY-MM-DD');
     await this.redisService.del(CACHE_KEYS.APPOINTMENT_SLOTS(psychologist.id, dateStr));
+
+    // Notify psychologist of new booking
+    try {
+      const patientName = `${patient.firstName} ${patient.lastName}`;
+      const apptDateStr = startTime.setZone(psychologist.timezone).toFormat('dd/MM/yyyy HH:mm');
+      await this.notificationsService.createNotification(psychologist.userId, {
+        type: NotificationType.APPOINTMENT_BOOKED,
+        title: 'Nouvelle demande de rendez-vous',
+        body: `Le patient ${patientName} a réservé un rendez-vous pour le ${apptDateStr}.`,
+        data: { appointmentId: appt.id },
+      });
+    } catch (err: any) {
+      // Don't fail the booking if notification fails
+      console.error(`Failed to send booking notification: ${err.message}`);
+    }
 
     // Send in-app notifications
     await this.notificationsService.createInAppNotification(
@@ -188,12 +190,36 @@ export class AppointmentsService {
     const targetLocal = DateTime.fromJSDate(appt.startAt).setZone(appt.timezone);
     await this.redisService.del(CACHE_KEYS.APPOINTMENT_SLOTS(appt.psychologistId, targetLocal.toFormat('YYYY-MM-DD')));
 
+    // Notify the other participant about cancellation
+    try {
+      const apptDateStr = targetLocal.toFormat('dd/MM/yyyy HH:mm');
+      if (userRole === UserRole.PATIENT) {
+        // Patient cancelled — notify psychologist
+        await this.notificationsService.createNotification(appt.psychologist.userId, {
+          type: NotificationType.APPOINTMENT_CANCELLED,
+          title: 'Rendez-vous annulé',
+          body: `Le patient ${appt.patient.firstName} ${appt.patient.lastName} a annulé le rendez-vous du ${apptDateStr}.`,
+          data: { appointmentId: id },
+        });
+      } else {
+        // Psychologist/Admin cancelled — notify patient
+        await this.notificationsService.createNotification(appt.patient.userId, {
+          type: NotificationType.APPOINTMENT_CANCELLED,
+          title: 'Rendez-vous annulé',
+          body: `Votre rendez-vous du ${apptDateStr} a été annulé. Motif : ${dto.reason || 'Non précisé'}.`,
+          data: { appointmentId: id },
+        });
+      }
+    } catch (err: any) {
+      console.error(`Failed to send cancellation notification: ${err.message}`);
+    }
+
     // Send in-app notifications
     const recipientUserId = userRole === UserRole.PATIENT ? appt.psychologist.userId : appt.patient.userId;
-    const senderName = userRole === UserRole.PATIENT 
+    const senderName = userRole === UserRole.PATIENT
       ? `${appt.patient.firstName} ${appt.patient.lastName}`
       : `Dr. ${appt.psychologist.firstName} ${appt.psychologist.lastName}`;
-    
+
     await this.notificationsService.createInAppNotification(
       recipientUserId,
       'Rendez-vous annulé',

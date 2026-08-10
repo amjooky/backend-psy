@@ -78,7 +78,7 @@ export class AppointmentReminderService {
 
         this.logger.log(`24h reminder sent for appointment ${appointment.id}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to send 24h reminders: ${error.message}`);
     }
   }
@@ -143,7 +143,7 @@ export class AppointmentReminderService {
 
         this.logger.log(`1h reminder sent for appointment ${appointment.id}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to send 1h reminders: ${error.message}`);
     }
   }
@@ -208,7 +208,7 @@ export class AppointmentReminderService {
 
         this.logger.log(`15min reminder sent for appointment ${appointment.id}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to send 15min reminders: ${error.message}`);
     }
   }
@@ -267,7 +267,7 @@ export class AppointmentReminderService {
 
       this.logger.log(`Manual reminder sent for appointment ${appointmentId}`);
       return { success: true };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to send manual reminder: ${error.message}`);
       throw error;
     }

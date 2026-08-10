@@ -157,24 +157,27 @@ export class JitsiMeetingService {
     );
 
     // Record participant tracking (upsert → idempotent on re-join / React Strict Mode double-invoke)
-    await this.prisma.meetingParticipant.upsert({
-      where: {
-        meetingRoomId_userId: {
+    // Upsert by composite unique may not be available in generated client types — perform idempotent find/create/update
+    const participant = await this.prisma.meetingParticipant.findFirst({ where: { meetingRoomId: room!.id, userId } });
+    if (!participant) {
+      await this.prisma.meetingParticipant.create({
+        data: {
           meetingRoomId: room!.id,
           userId,
+          role: roleString,
+          joinedAt: new Date(),
         },
-      },
-      create: {
-        meetingRoomId: room!.id,
-        userId,
-        role: roleString,
-      },
-      update: {
-        role: roleString,
-        joinedAt: new Date(),
-        leftAt: null,
-      },
-    });
+      });
+    } else {
+      await this.prisma.meetingParticipant.update({
+        where: { id: participant.id },
+        data: {
+          role: roleString,
+          joinedAt: new Date(),
+          leftAt: null,
+        },
+      });
+    }
 
     // Log join event
     await this.prisma.meetingLog.create({

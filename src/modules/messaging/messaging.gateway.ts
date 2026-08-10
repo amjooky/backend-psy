@@ -13,7 +13,7 @@ import { WsJwtGuard } from './guards/ws-jwt.guard';
 import { PrismaService } from '../../database/prisma.service';
 
 @WebSocketGateway({
-  cors: { origin: '*' },
+  cors: { origin: true, credentials: true },
   namespace: 'chat',
 })
 export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnect {

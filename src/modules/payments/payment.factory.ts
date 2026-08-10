@@ -16,7 +16,7 @@ export class PaymentFactory {
         return this.stripeStrategy;
       case PaymentProvider.PAYMEE:
         return this.paymeeStrategy;
-      case PaymentProvider.MOCK:
+      case (PaymentProvider as any).MOCK:
         return this.mockStrategy;
       default:
         throw new BadRequestException(`Payment provider ${provider} is not supported yet.`);

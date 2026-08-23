@@ -13,8 +13,8 @@
     "start:dev": "nest start --watch",
     "dev": "ts-node -r tsconfig-paths/register src/main.ts",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "prisma db push --skip-generate && node dist/main",
-    "start:render": "prisma db push --skip-generate && node dist/main",
+    "start:prod": "prisma db push --skip-generate && ts-node prisma/seed.ts && node dist/main",
+    "start:render": "prisma db push --skip-generate && ts-node prisma/seed.ts && node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -102,6 +102,7 @@
     "speakeasy": "^2.0.0",
     "stripe": "^14.18.0",
     "swagger-ui-express": "^5.0.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "uuid": "^9.0.1",
     "zxcvbn": "^4.4.2"
@@ -122,7 +123,6 @@
     "supertest": "^6.3.4",
     "ts-jest": "^29.1.2",
     "ts-loader": "^9.5.1",
-    "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0"
   },
   "overrides": {

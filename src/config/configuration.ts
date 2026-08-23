@@ -97,7 +97,7 @@ export default () => ({
     fromNumber: process.env.TWILIO_FROM_NUMBER,
   },
   jitsi: {
-    domain: process.env.JITSI_DOMAIN || 'meet.jit.si',
+    domain: process.env.JITSI_DOMAIN || 'meet.ffmuc.net',
     appId: process.env.JITSI_APP_ID || 'monpsy',
     appSecret: process.env.JITSI_APP_SECRET || 'jitsiappsecret1234567890jitsiappsecret',
     tokenExpiry: parseInt(process.env.JITSI_TOKEN_EXPIRY || '7200', 10), // Default 2 hours

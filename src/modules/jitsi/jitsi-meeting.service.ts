@@ -175,11 +175,11 @@ export class JitsiMeetingService {
     }
 
     // Domain configuration
-    const domain = this.config.get<string>('jitsi.domain') || 'meet.jit.si';
+    const domain = this.config.get<string>('jitsi.domain') || 'meet.ffmuc.net';
 
-    // Generate JWT token only for self-hosted/private Jitsi (meet.jit.si free service does not accept custom unsigned JWTs)
+    // Generate JWT token for self-hosted/private Jitsi or JaaS
     let token: string | undefined;
-    if (domain !== 'meet.jit.si') {
+    if (domain !== 'meet.jit.si' && domain !== 'meet.ffmuc.net') {
       token = this.jwtGenerator.generateToken(
         userId,
         userDetails.fullName,

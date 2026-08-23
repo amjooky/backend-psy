@@ -8,26 +8,39 @@ export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
 
   constructor(private readonly configService: ConfigService) {
-    const host = this.configService.get<string>('redis.host');
-    const port = this.configService.get<number>('redis.port');
+    const redisUrl = process.env.REDIS_URL || this.configService.get<string>('redis.url');
+    const host = this.configService.get<string>('redis.host') || 'localhost';
+    const port = this.configService.get<number>('redis.port') || 6379;
     const password = this.configService.get<string>('redis.password');
-    const db = this.configService.get<number>('redis.db');
-    const tls = this.configService.get<boolean>('redis.tls');
+    const db = this.configService.get<number>('redis.db') || 0;
+    const tls = this.configService.get<boolean>('redis.tls') || false;
 
-    this.client = new Redis({
-      host,
-      port,
-      password,
-      db,
-      tls: tls ? {} : undefined,
-      lazyConnect: false,
-      enableReadyCheck: true,
-      maxRetriesPerRequest: 3,
-      retryStrategy(times) {
-        if (times > 10) return null;
-        return Math.min(times * 100, 3000);
-      },
-    });
+    if (redisUrl) {
+      this.client = new Redis(redisUrl, {
+        lazyConnect: false,
+        enableReadyCheck: true,
+        maxRetriesPerRequest: 3,
+        retryStrategy(times) {
+          if (times > 10) return null;
+          return Math.min(times * 100, 3000);
+        },
+      });
+    } else {
+      this.client = new Redis({
+        host,
+        port,
+        password: password || undefined,
+        db,
+        tls: tls ? {} : undefined,
+        lazyConnect: false,
+        enableReadyCheck: true,
+        maxRetriesPerRequest: 3,
+        retryStrategy(times) {
+          if (times > 10) return null;
+          return Math.min(times * 100, 3000);
+        },
+      });
+    }
 
     this.client.on('connect', () => this.logger.log('Redis connected'));
     this.client.on('ready', () => this.logger.log('Redis ready'));

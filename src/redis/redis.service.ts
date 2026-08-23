@@ -15,14 +15,16 @@ export class RedisService implements OnModuleDestroy {
     const db = this.configService.get<number>('redis.db') || 0;
     const tls = this.configService.get<boolean>('redis.tls') || false;
 
+    let hasLoggedError = false;
+
     if (redisUrl) {
       this.client = new Redis(redisUrl, {
         lazyConnect: false,
         enableReadyCheck: true,
-        maxRetriesPerRequest: 3,
+        maxRetriesPerRequest: 1,
         retryStrategy(times) {
-          if (times > 10) return null;
-          return Math.min(times * 100, 3000);
+          if (times > 3) return null;
+          return Math.min(times * 200, 2000);
         },
       });
     } else {
@@ -34,18 +36,25 @@ export class RedisService implements OnModuleDestroy {
         tls: tls ? {} : undefined,
         lazyConnect: false,
         enableReadyCheck: true,
-        maxRetriesPerRequest: 3,
+        maxRetriesPerRequest: 1,
         retryStrategy(times) {
-          if (times > 10) return null;
-          return Math.min(times * 100, 3000);
+          if (times > 3) return null;
+          return Math.min(times * 200, 2000);
         },
       });
     }
 
-    this.client.on('connect', () => this.logger.log('Redis connected'));
+    this.client.on('connect', () => {
+      hasLoggedError = false;
+      this.logger.log('Redis connected');
+    });
     this.client.on('ready', () => this.logger.log('Redis ready'));
-    this.client.on('error', (err) => this.logger.error(`Redis error: ${err.message}`));
-    this.client.on('close', () => this.logger.warn('Redis connection closed'));
+    this.client.on('error', (err) => {
+      if (!hasLoggedError) {
+        this.logger.warn(`Redis unavailable (${err.message}). Application running with in-memory fallback.`);
+        hasLoggedError = true;
+      }
+    });
   }
 
   async onModuleDestroy(): Promise<void> {

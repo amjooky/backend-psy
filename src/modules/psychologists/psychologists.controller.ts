@@ -43,21 +43,13 @@ import { Public } from '../../common/decorators/public.decorator';
 export class PsychologistsController {
   constructor(private readonly psychologistsService: PsychologistsService) {}
 
-  // ─── Public Endpoints ────────────────────────────────────────
+  // ─── Public List ─────────────────────────────────────────────
 
   @Public()
   @Get()
   @ApiOperation({ summary: 'Browse active psychologists with filters' })
   async findAll(@Query() query: PsychologistQueryDto) {
     return this.psychologistsService.findAll(query);
-  }
-
-  @Public()
-  @Get(':id')
-  @ApiOperation({ summary: 'Get public psychologist profile' })
-  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.psychologistsService.findPublicById(id);
   }
 
   // ─── Psychologist Own Profile ─────────────────────────────────
@@ -195,6 +187,15 @@ export class PsychologistsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Get('admin/all')
+  @ApiOperation({ summary: '[ADMIN] List all psychologists including pending' })
+  async findAllAdmin(@Query() query: PsychologistQueryDto) {
+    return this.psychologistsService.findAllAdmin(query);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @Patch('admin/certificates/:id/status')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '[ADMIN] Approve or reject a psychologist certificate' })
@@ -204,15 +205,6 @@ export class PsychologistsController {
     @Body() dto: UpdateCertificateStatusDto,
   ) {
     return this.psychologistsService.updateCertificateStatus(adminUserId, id, dto.status as any);
-  }
-
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @Get('admin/all')
-  @ApiOperation({ summary: '[ADMIN] List all psychologists including pending' })
-  async findAllAdmin(@Query() query: PsychologistQueryDto) {
-    return this.psychologistsService.findAllAdmin(query);
   }
 
   @ApiBearerAuth()
@@ -235,5 +227,15 @@ export class PsychologistsController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   async suspend(@Param('id', ParseUUIDPipe) id: string) {
     return this.psychologistsService.suspendPsychologist(id);
+  }
+
+  // ─── Public Dynamic Parameter Route (must be last) ────────────
+
+  @Public()
+  @Get(':id')
+  @ApiOperation({ summary: 'Get public psychologist profile' })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.psychologistsService.findPublicById(id);
   }
 }

@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { DocumentsService } from '../documents/documents.service';
 import { ConfigService } from '@nestjs/config';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class InvoiceService {
@@ -14,13 +15,21 @@ export class InvoiceService {
     private readonly config: ConfigService,
   ) {}
 
-  async getOrGenerateInvoicePdf(invoiceId: string): Promise<string> {
+  async getOrGenerateInvoicePdf(invoiceId: string, userId?: string, userRole?: UserRole): Promise<string> {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
-      select: { pdfUrl: true },
+      include: { patient: true },
     });
 
-    if (invoice?.pdfUrl) {
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found.');
+    }
+
+    if (userRole === UserRole.PATIENT && userId && invoice.patient.userId !== userId) {
+      throw new ForbiddenException('Access denied.');
+    }
+
+    if (invoice.pdfUrl) {
       return invoice.pdfUrl;
     }
 

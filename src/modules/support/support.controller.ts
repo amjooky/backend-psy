@@ -37,6 +37,17 @@ export class SupportController {
     return this.supportService.getMyTickets(userId);
   }
 
+  // ─── Admin Endpoints (placed before parameter routes) ────────
+
+  @Get('admin/all')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '[ADMIN] List all support tickets' })
+  async listAll() {
+    return this.supportService.listAllTickets();
+  }
+
+  // ─── Parameterized Routes ────────────────────────────────────
+
   @Get(':id')
   @ApiOperation({ summary: 'Get details of a support ticket and its replies' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
@@ -53,15 +64,6 @@ export class SupportController {
     @Body() dto: ReplyTicketDto,
   ) {
     return this.supportService.replyToTicket(userId, id, dto);
-  }
-
-  // ─── Admin Endpoints ─────────────────────────────────────────
-
-  @Get('admin/all')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: '[ADMIN] List all support tickets' })
-  async listAll() {
-    return this.supportService.listAllTickets();
   }
 
   @Patch(':id/assign')

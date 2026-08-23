@@ -74,7 +74,7 @@ export const validationSchema = Joi.object({
   BULL_REDIS_PASSWORD: Joi.string().allow('').required(),
 
   // Jitsi Meet
-  JITSI_DOMAIN: Joi.string().default('meet.monpsy.tn'),
+  JITSI_DOMAIN: Joi.string().default('meet.jit.si'),
   JITSI_APP_ID: Joi.string().default('monpsy'),
   JITSI_APP_SECRET: Joi.string().min(32).default('jitsiappsecret1234567890jitsiappsecret'),
   JITSI_TOKEN_EXPIRY: Joi.number().default(7200),

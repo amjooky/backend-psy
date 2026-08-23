@@ -30,6 +30,7 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
       this.userSocketMap.set(userId, client.id);
       this.logger.debug(`Socket Client connected: ${client.id} (User: ${userId})`);
     }
+  
   }
 
   handleDisconnect(client: Socket) {

@@ -99,19 +99,22 @@ export class JitsiMeetingService {
       throw new NotFoundException('Appointment not found');
     }
 
-    // Verify appointment time window
+    // Verify appointment time window (enforced in production, relaxed in development for testing)
+    const isDev = this.config.get<string>('app.nodeEnv') === 'development';
     const now = new Date();
     const allowedStart = DateTime.fromJSDate(appointment.startAt).minus({ minutes: 10 }).toJSDate();
     const allowedEnd = DateTime.fromJSDate(appointment.endAt).plus({ minutes: 30 }).toJSDate();
 
-    if (now < allowedStart) {
-      throw new BadRequestException(
-        `La consultation n'est pas encore active. Veuillez rejoindre à l'heure prévue : ${DateTime.fromJSDate(appointment.startAt).setLocale('fr').toLocaleString(DateTime.DATETIME_SHORT)}`
-      );
-    }
+    if (!isDev) {
+      if (now < allowedStart) {
+        throw new BadRequestException(
+          `La consultation n'est pas encore active. Veuillez rejoindre à l'heure prévue : ${DateTime.fromJSDate(appointment.startAt).setLocale('fr').toLocaleString(DateTime.DATETIME_SHORT)}`
+        );
+      }
 
-    if (now > allowedEnd) {
-      throw new BadRequestException('Cette séance de consultation a expiré et n\'est plus accessible.');
+      if (now > allowedEnd) {
+        throw new BadRequestException('Cette séance de consultation a expiré et n\'est plus accessible.');
+      }
     }
 
     // Verify participation
@@ -123,8 +126,26 @@ export class JitsiMeetingService {
       throw new ForbiddenException('You are not authorized to join this meeting room.');
     }
 
-    // Fetch or create meeting room
+    // Check if psychologist has already launched the session
+    const psyUserId = appointment.psychologist.userId;
     let room = appointment.meetingRoom;
+
+    if (isPatient) {
+      // Patient cannot join before the psychologist launches the room
+      const psyParticipant = room
+        ? await this.prisma.meetingParticipant.findFirst({
+            where: { meetingRoomId: room.id, userId: psyUserId },
+          })
+        : null;
+
+      if (!room || room.status !== MeetingRoomStatus.ACTIVE || !psyParticipant) {
+        throw new BadRequestException(
+          `Le Dr. ${appointment.psychologist.firstName} ${appointment.psychologist.lastName} n'a pas encore lancé la séance. Veuillez patienter, la salle s'ouvrira automatiquement dès que le praticien sera connecté.`
+        );
+      }
+    }
+
+    // Fetch or create meeting room (for psychologist/admin)
     if (!room || room.status !== MeetingRoomStatus.ACTIVE) {
       room = await this.createMeetingRoom(appointmentId);
     }
@@ -147,14 +168,20 @@ export class JitsiMeetingService {
       };
     }
 
-    // Generate secure Jitsi JWT token
-    const token = this.jwtGenerator.generateToken(
-      userId,
-      userDetails.fullName,
-      userDetails.email,
-      room!.roomName,
-      isModerator,
-    );
+    // Domain configuration
+    const domain = this.config.get<string>('jitsi.domain') || 'meet.jit.si';
+
+    // Generate JWT token only for self-hosted/private Jitsi (meet.jit.si free service does not accept custom unsigned JWTs)
+    let token: string | undefined;
+    if (domain !== 'meet.jit.si') {
+      token = this.jwtGenerator.generateToken(
+        userId,
+        userDetails.fullName,
+        userDetails.email,
+        room!.roomName,
+        isModerator,
+      );
+    }
 
     // Record participant tracking (upsert → idempotent on re-join / React Strict Mode double-invoke)
     // Upsert by composite unique may not be available in generated client types — perform idempotent find/create/update
@@ -193,7 +220,11 @@ export class JitsiMeetingService {
       roomName: room!.roomName,
       password: room!.password,
       token,
-      domain: this.config.get('jitsi.domain') || 'meet.monpsy.tn',
+      domain,
+      userInfo: {
+        displayName: userDetails.fullName,
+        email: userDetails.email,
+      },
     };
   }
 }

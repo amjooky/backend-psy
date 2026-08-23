@@ -73,7 +73,7 @@ export const JitsiConsultationRoom: React.FC<JitsiMeetingProps> = ({
         width: '100%',
         height: '100%',
         parentNode: containerRef.current,
-        jwt: config.token,
+        jwt: config.token || undefined,
         configOverwrite: {
           startWithAudioMuted: false,
           startWithVideoMuted: false,

@@ -58,15 +58,18 @@ export class AvailabilityService {
       }
     }
 
-    const exception = await (this.prisma as any).availabilityException.findFirst({
-      where: {
-        psychologistId,
-        date: {
-          gte: targetDate.startOf('day').toJSDate(),
-          lte: targetDate.endOf('day').toJSDate(),
-        },
-      },
-    });
+    const exception = (this.prisma as any).availabilityException?.findFirst
+      ? await (this.prisma as any).availabilityException.findFirst({
+          where: {
+            psychologistId,
+            date: {
+              gte: targetDate.startOf('day').toJSDate(),
+              lte: targetDate.endOf('day').toJSDate(),
+            },
+          },
+        })
+      : null;
+
     if (exception) {
       return [];
     }

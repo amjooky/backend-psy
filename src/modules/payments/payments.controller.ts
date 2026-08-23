@@ -60,8 +60,11 @@ export class PaymentsController {
   @Get('invoices/:id/pdf')
   @Roles(UserRole.PATIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Generate or get invoice PDF' })
-  async getInvoicePdf(@Param('id', ParseUUIDPipe) invoiceId: string) {
-    return { url: await this.invoiceService.getOrGenerateInvoicePdf(invoiceId) };
+  async getInvoicePdf(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) invoiceId: string,
+  ) {
+    return { url: await this.invoiceService.getOrGenerateInvoicePdf(invoiceId, user.sub, user.role) };
   }
 
   @Get('admin/all-invoices')

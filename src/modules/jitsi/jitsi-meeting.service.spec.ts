@@ -56,6 +56,7 @@ describe('JitsiMeetingService Integration Spec', () => {
               create: jest.fn(),
             },
             meetingParticipant: {
+              findFirst: jest.fn(),
               create: jest.fn(),
             },
             meetingLog: {
@@ -153,6 +154,10 @@ describe('JitsiMeetingService Integration Spec', () => {
       };
 
       jest.spyOn(prisma.appointment, 'findUnique').mockResolvedValue(mockAppointment as any);
+      jest.spyOn(prisma.meetingParticipant, 'findFirst').mockResolvedValue({
+        id: 'participant-psy',
+        userId: mockPsychologist.userId,
+      } as any);
 
       const result = await service.getMeetingAccess(
         mockPatient.userId,
@@ -165,6 +170,84 @@ describe('JitsiMeetingService Integration Spec', () => {
       expect(result.password).toBe(mockAppointment.meetingRoom.password);
       expect(result.token).toBeDefined();
       expect(result.domain).toBe('meet.monpsy.tn');
+      expect(result.userInfo).toBeDefined();
+      expect(result.userInfo.displayName).toBe('Amine Ben Ali');
+    });
+
+    it('should omit token when using free public meet.jit.si domain', async () => {
+      jest.spyOn(mockConfigService, 'get').mockImplementation((key: string) => {
+        if (key === 'jitsi.domain') return 'meet.jit.si';
+        return null;
+      });
+
+      const now = new Date();
+      const mockAppointment = {
+        id: 'appt-uuid-9999',
+        status: AppointmentStatus.CONFIRMED,
+        startAt: DateTime.fromJSDate(now).minus({ minutes: 5 }).toJSDate(),
+        endAt: DateTime.fromJSDate(now).plus({ minutes: 55 }).toJSDate(),
+        timezone: 'Africa/Tunis',
+        patientId: mockPatient.id,
+        psychologistId: mockPsychologist.id,
+        patient: mockPatient,
+        psychologist: mockPsychologist,
+        meetingRoom: {
+          id: 'room-uuid-1111',
+          roomName: 'monpsy-session-appt-uuid-9999-randomsuffix',
+          password: 'securepassword',
+          status: MeetingRoomStatus.ACTIVE,
+        },
+      };
+
+      jest.spyOn(prisma.appointment, 'findUnique').mockResolvedValue(mockAppointment as any);
+      jest.spyOn(prisma.meetingParticipant, 'findFirst').mockResolvedValue({
+        id: 'participant-psy',
+        userId: mockPsychologist.userId,
+      } as any);
+
+      const result = await service.getMeetingAccess(
+        mockPatient.userId,
+        UserRole.PATIENT,
+        mockAppointment.id,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.domain).toBe('meet.jit.si');
+      expect(result.token).toBeUndefined();
+      expect(result.userInfo.displayName).toBe('Amine Ben Ali');
+    });
+
+    it('should throw BadRequestException if patient joins before psychologist launches the room', async () => {
+      const now = new Date();
+      const mockAppointment = {
+        id: 'appt-uuid-9999',
+        status: AppointmentStatus.CONFIRMED,
+        startAt: DateTime.fromJSDate(now).minus({ minutes: 5 }).toJSDate(),
+        endAt: DateTime.fromJSDate(now).plus({ minutes: 55 }).toJSDate(),
+        timezone: 'Africa/Tunis',
+        patientId: mockPatient.id,
+        psychologistId: mockPsychologist.id,
+        patient: mockPatient,
+        psychologist: mockPsychologist,
+        meetingRoom: {
+          id: 'room-uuid-1111',
+          roomName: 'monpsy-session-appt-uuid-9999-randomsuffix',
+          password: 'securepassword',
+          status: MeetingRoomStatus.ACTIVE,
+        },
+      };
+
+      jest.spyOn(prisma.appointment, 'findUnique').mockResolvedValue(mockAppointment as any);
+      // Psychologist not joined yet
+      jest.spyOn(prisma.meetingParticipant, 'findFirst').mockResolvedValue(null);
+
+      await expect(
+        service.getMeetingAccess(
+          mockPatient.userId,
+          UserRole.PATIENT,
+          mockAppointment.id,
+        ),
+      ).rejects.toThrow('n\'a pas encore lancé la séance');
     });
   });
 });

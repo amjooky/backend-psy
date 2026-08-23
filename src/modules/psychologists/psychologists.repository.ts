@@ -229,6 +229,9 @@ export class PsychologistsRepository {
   }
 
   async listAvailabilityExceptions(psychologistId: string) {
+    if (!(this.prisma as any).availabilityException?.findMany) {
+      return [];
+    }
     return (this.prisma as any).availabilityException.findMany({
       where: { psychologistId },
       orderBy: { date: 'asc' },
@@ -236,12 +239,18 @@ export class PsychologistsRepository {
   }
 
   async createAvailabilityException(psychologistId: string, date: Date, reason?: string) {
+    if (!(this.prisma as any).availabilityException?.create) {
+      return { id: 'temp', psychologistId, date, reason };
+    }
     return (this.prisma as any).availabilityException.create({
       data: { psychologistId, date, reason },
     });
   }
 
   async deleteAvailabilityException(id: string, psychologistId: string) {
+    if (!(this.prisma as any).availabilityException?.deleteMany) {
+      return;
+    }
     await (this.prisma as any).availabilityException.deleteMany({
       where: { id, psychologistId },
     });

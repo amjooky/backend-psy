@@ -99,22 +99,28 @@ export class JitsiMeetingService {
       throw new NotFoundException('Appointment not found');
     }
 
-    // Verify appointment time window (enforced in production, relaxed in development for testing)
+    // Verify appointment time window
+    // Allow entry up to 120 minutes before start time and up to 6 hours after end time
     const isDev = this.config.get<string>('app.nodeEnv') === 'development';
     const now = new Date();
-    const allowedStart = DateTime.fromJSDate(appointment.startAt).minus({ minutes: 10 }).toJSDate();
-    const allowedEnd = DateTime.fromJSDate(appointment.endAt).plus({ minutes: 30 }).toJSDate();
+    const allowedStart = DateTime.fromJSDate(appointment.startAt).minus({ minutes: 120 }).toJSDate();
+    const allowedEnd = DateTime.fromJSDate(appointment.endAt).plus({ hours: 6 }).toJSDate();
 
-    if (!isDev) {
-      if (now < allowedStart) {
-        throw new BadRequestException(
-          `La consultation n'est pas encore active. Veuillez rejoindre à l'heure prévue : ${DateTime.fromJSDate(appointment.startAt).setLocale('fr').toLocaleString(DateTime.DATETIME_SHORT)}`
-        );
-      }
+    // Check timezone (Tunisia / CET UTC+1 as default)
+    const targetZone = appointment.patient?.timezone || 'Africa/Tunis';
+    const formattedStartTime = DateTime.fromJSDate(appointment.startAt)
+      .setZone(targetZone)
+      .setLocale('fr')
+      .toLocaleString(DateTime.DATETIME_SHORT);
 
-      if (now > allowedEnd) {
-        throw new BadRequestException('Cette séance de consultation a expiré et n\'est plus accessible.');
-      }
+    if (now < allowedStart) {
+      throw new BadRequestException(
+        `La consultation n'est pas encore active. Veuillez rejoindre à l'heure prévue : ${formattedStartTime}`
+      );
+    }
+
+    if (now > allowedEnd) {
+      throw new BadRequestException('Cette séance de consultation a expiré et n\'est plus accessible.');
     }
 
     // Verify participation

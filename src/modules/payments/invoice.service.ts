@@ -30,6 +30,17 @@ export class InvoiceService {
     }
 
     if (invoice.pdfUrl) {
+      const serverPort = this.config.get<number>('PORT') || 3000;
+      const baseUrl =
+        process.env.RENDER_EXTERNAL_URL ||
+        process.env.APP_URL ||
+        (process.env.NODE_ENV === 'production'
+          ? 'https://backend-psy-upv7.onrender.com'
+          : `http://localhost:${serverPort}`);
+
+      if (invoice.pdfUrl.includes('localhost:')) {
+        return invoice.pdfUrl.replace(/http:\/\/localhost:\d+/, baseUrl);
+      }
       return invoice.pdfUrl;
     }
 

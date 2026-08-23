@@ -61,28 +61,51 @@ export class AuthService {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // REGISTRATION
+  // REGISTER
   // ─────────────────────────────────────────────────────────────
 
   async registerPatient(
     dto: RegisterPatientDto,
     ip: string,
-  ): Promise<{ message: string; userId: string }> {
-    await this.assertEmailUnique(dto.email);
+  ): Promise<{ message: string; userId: string; recoveryKey?: string }> {
+    const rawPseudo = dto.pseudo?.trim();
+    const cleanPseudo = rawPseudo ? rawPseudo.replace(/\s+/g, '_') : undefined;
+
+    // Resolve email
+    let emailToUse: string;
+    if (dto.email && dto.email.trim().length > 0) {
+      emailToUse = dto.email.toLowerCase().trim();
+    } else if (cleanPseudo) {
+      emailToUse = `${cleanPseudo.toLowerCase()}@anonymous.monpsy.tn`;
+    } else {
+      throw new BadRequestException('Veuillez renseigner un email ou un pseudo');
+    }
+
+    await this.assertEmailUnique(emailToUse);
 
     const passwordHash = await this.hashPassword(dto.password);
+    const firstNameToUse = (dto.firstName?.trim() || cleanPseudo || 'Patient');
+    const lastNameToUse = (dto.lastName?.trim() || '');
+    const isAnonymous = !dto.email || !!cleanPseudo;
+    const anonymousNameToUse = cleanPseudo || `${firstNameToUse}`;
+
+    // Generate random recovery key
+    const recoveryKey = `PSY-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: dto.email.toLowerCase().trim(),
+          email: emailToUse,
           passwordHash,
           role: UserRole.PATIENT,
+          isEmailVerified: isAnonymous ? true : false,
           patient: {
             create: {
-              firstName: dto.firstName.trim(),
-              lastName: dto.lastName.trim(),
+              firstName: firstNameToUse,
+              lastName: lastNameToUse,
               phoneNumber: dto.phoneNumber,
+              isAnonymous,
+              anonymousName: anonymousNameToUse,
             },
           },
         },
@@ -91,14 +114,16 @@ export class AuthService {
       return user;
     });
 
-    // Issue email verification token
-    await this.issueEmailVerificationToken(result.id);
+    if (!isAnonymous) {
+      await this.issueEmailVerificationToken(result.id);
+    }
 
-    this.logger.log(`Patient registered: ${result.email} from IP ${ip}`);
+    this.logger.log(`Patient registered: ${result.email} (Anon: ${isAnonymous}) from IP ${ip}`);
 
     return {
-      message: 'Registration successful. Please verify your email.',
+      message: 'Inscription réussie. Bienvenue sur MonPsy !',
       userId: result.id,
+      recoveryKey,
     };
   }
 
@@ -143,7 +168,7 @@ export class AuthService {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // LOGIN
+  // LOGIN (Supports Email or Pseudo)
   // ─────────────────────────────────────────────────────────────
 
   async login(
@@ -151,8 +176,18 @@ export class AuthService {
     ip: string,
     userAgent: string,
   ): Promise<LoginResponse | { requiresTwoFactor: boolean; userId: string }> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase().trim(), deletedAt: null },
+    const rawInput = dto.email.toLowerCase().trim();
+    
+    // 1. Try finding direct user by email
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: rawInput },
+          { email: `${rawInput}@anonymous.monpsy.tn` },
+          { patient: { anonymousName: { equals: rawInput, mode: 'insensitive' } } },
+        ],
+        deletedAt: null,
+      },
       select: {
         id: true,
         email: true,

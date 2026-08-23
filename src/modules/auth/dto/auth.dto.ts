@@ -10,38 +10,46 @@ import {
 } from 'class-validator';
 
 export class RegisterPatientDto {
-  @ApiProperty({ example: 'patient@email.com' })
-  @IsEmail({}, { message: 'Please provide a valid email address' })
+  @ApiPropertyOptional({ example: 'patient@email.com' })
+  @IsOptional()
+  @IsString()
   @MaxLength(255)
-  email!: string;
+  email?: string;
+
+  @ApiPropertyOptional({ example: 'Serein_2026' })
+  @IsOptional()
+  @IsString()
+  @MinLength(3, { message: 'Le pseudo doit contenir au moins 3 caractères' })
+  @MaxLength(50)
+  pseudo?: string;
 
   @ApiProperty({
     example: 'SecurePass123!',
     description: 'Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char',
   })
   @IsString()
-  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  @MinLength(8, { message: 'Le mot de passe doit comporter au moins 8 caractères' })
   @MaxLength(128)
   @Matches(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#])[A-Za-z\d@$!%*?&^#]+$/,
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#_\-+=])[A-Za-z\d@$!%*?&^#_\-+=]+$/,
     {
       message:
-        'Password must contain uppercase, lowercase, number and special character',
+        'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial',
     },
   )
   password!: string;
 
-  @ApiProperty({ example: 'Amine' })
+  @ApiPropertyOptional({ example: 'Amine' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(100)
-  firstName!: string;
+  firstName?: string;
 
-  @ApiProperty({ example: 'Ben Ali' })
+  @ApiPropertyOptional({ example: 'Ben Ali' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(100)
-  lastName!: string;
+  lastName?: string;
 
   @ApiPropertyOptional({ example: '+21612345678' })
   @IsOptional()
@@ -61,7 +69,7 @@ export class RegisterPsychologistDto {
   @MinLength(8)
   @MaxLength(128)
   @Matches(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#])[A-Za-z\d@$!%*?&^#]+$/,
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#_\-+=])[A-Za-z\d@$!%*?&^#_\-+=]+$/,
     {
       message:
         'Password must contain uppercase, lowercase, number and special character',
@@ -95,13 +103,14 @@ export class RegisterPsychologistDto {
 }
 
 export class LoginDto {
-  @ApiProperty({ example: 'user@email.com' })
-  @IsEmail({}, { message: 'Please provide a valid email address' })
+  @ApiProperty({ example: 'user@email.com or pseudo' })
+  @IsString({ message: 'Veuillez saisir votre email ou votre pseudo' })
+  @IsNotEmpty({ message: 'Email ou pseudo requis' })
   email!: string;
 
   @ApiProperty({ example: 'SecurePass123!' })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Mot de passe requis' })
   password!: string;
 
   @ApiPropertyOptional({ example: '123456', description: '6-digit 2FA code' })

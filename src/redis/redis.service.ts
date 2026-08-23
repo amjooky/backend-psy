@@ -6,6 +6,7 @@ import Redis from 'ioredis';
 export class RedisService implements OnModuleDestroy {
   private readonly client: Redis;
   private readonly logger = new Logger(RedisService.name);
+  private isConnected = false;
 
   constructor(private readonly configService: ConfigService) {
     const redisUrl = process.env.REDIS_URL || this.configService.get<string>('redis.url');
@@ -19,7 +20,7 @@ export class RedisService implements OnModuleDestroy {
 
     if (redisUrl) {
       this.client = new Redis(redisUrl, {
-        lazyConnect: false,
+        lazyConnect: true,
         enableReadyCheck: true,
         maxRetriesPerRequest: 1,
         retryStrategy(times) {
@@ -34,7 +35,7 @@ export class RedisService implements OnModuleDestroy {
         password: password || undefined,
         db,
         tls: tls ? {} : undefined,
-        lazyConnect: false,
+        lazyConnect: true,
         enableReadyCheck: true,
         maxRetriesPerRequest: 1,
         retryStrategy(times) {
@@ -45,20 +46,33 @@ export class RedisService implements OnModuleDestroy {
     }
 
     this.client.on('connect', () => {
+      this.isConnected = true;
       hasLoggedError = false;
       this.logger.log('Redis connected');
     });
-    this.client.on('ready', () => this.logger.log('Redis ready'));
+    this.client.on('ready', () => {
+      this.isConnected = true;
+      this.logger.log('Redis ready');
+    });
     this.client.on('error', (err) => {
+      this.isConnected = false;
       if (!hasLoggedError) {
         this.logger.warn(`Redis unavailable (${err.message}). Application running with in-memory fallback.`);
         hasLoggedError = true;
       }
     });
+    this.client.on('close', () => {
+      this.isConnected = false;
+    });
+
+    // Attempt gentle connect without blocking startup
+    this.client.connect().catch(() => {});
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.quit();
+    try {
+      await this.client.quit();
+    } catch {}
   }
 
   getClient(): Redis {
@@ -68,35 +82,58 @@ export class RedisService implements OnModuleDestroy {
   // ─── Key-Value Operations ───────────────────────────
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
-    if (ttlSeconds) {
-      await this.client.setex(key, ttlSeconds, value);
-    } else {
-      await this.client.set(key, value);
+    try {
+      if (ttlSeconds) {
+        await this.client.setex(key, ttlSeconds, value);
+      } else {
+        await this.client.set(key, value);
+      }
+    } catch (err) {
+      // Safe fallback when Redis is offline
     }
   }
 
   async get(key: string): Promise<string | null> {
-    return this.client.get(key);
+    try {
+      return await this.client.get(key);
+    } catch (err) {
+      return null;
+    }
   }
 
   async del(key: string | string[]): Promise<number> {
-    if (Array.isArray(key)) {
-      return this.client.del(...key);
+    try {
+      if (Array.isArray(key)) {
+        if (key.length === 0) return 0;
+        return await this.client.del(...key);
+      }
+      return await this.client.del(key);
+    } catch (err) {
+      return 0;
     }
-    return this.client.del(key);
   }
 
   async exists(key: string): Promise<boolean> {
-    const result = await this.client.exists(key);
-    return result === 1;
+    try {
+      const result = await this.client.exists(key);
+      return result === 1;
+    } catch (err) {
+      return false;
+    }
   }
 
   async expire(key: string, ttlSeconds: number): Promise<void> {
-    await this.client.expire(key, ttlSeconds);
+    try {
+      await this.client.expire(key, ttlSeconds);
+    } catch (err) {}
   }
 
   async ttl(key: string): Promise<number> {
-    return this.client.ttl(key);
+    try {
+      return await this.client.ttl(key);
+    } catch (err) {
+      return -1;
+    }
   }
 
   // ─── JSON Operations ─────────────────────────────────
@@ -118,59 +155,105 @@ export class RedisService implements OnModuleDestroy {
   // ─── Hash Operations ─────────────────────────────────
 
   async hset(key: string, field: string, value: string): Promise<void> {
-    await this.client.hset(key, field, value);
+    try {
+      await this.client.hset(key, field, value);
+    } catch (err) {}
   }
 
   async hget(key: string, field: string): Promise<string | null> {
-    return this.client.hget(key, field);
+    try {
+      return await this.client.hget(key, field);
+    } catch (err) {
+      return null;
+    }
   }
 
   async hgetall(key: string): Promise<Record<string, string>> {
-    return this.client.hgetall(key);
+    try {
+      return await this.client.hgetall(key);
+    } catch (err) {
+      return {};
+    }
   }
 
   async hdel(key: string, field: string): Promise<number> {
-    return this.client.hdel(key, field);
+    try {
+      return await this.client.hdel(key, field);
+    } catch (err) {
+      return 0;
+    }
   }
 
   // ─── Set Operations ──────────────────────────────────
 
   async sadd(key: string, ...members: string[]): Promise<number> {
-    return this.client.sadd(key, ...members);
+    try {
+      return await this.client.sadd(key, ...members);
+    } catch (err) {
+      return 0;
+    }
   }
 
   async srem(key: string, ...members: string[]): Promise<number> {
-    return this.client.srem(key, ...members);
+    try {
+      return await this.client.srem(key, ...members);
+    } catch (err) {
+      return 0;
+    }
   }
 
   async sismember(key: string, member: string): Promise<boolean> {
-    return (await this.client.sismember(key, member)) === 1;
+    try {
+      return (await this.client.sismember(key, member)) === 1;
+    } catch (err) {
+      return false;
+    }
   }
 
   async smembers(key: string): Promise<string[]> {
-    return this.client.smembers(key);
+    try {
+      return await this.client.smembers(key);
+    } catch (err) {
+      return [];
+    }
   }
 
   // ─── Increment ───────────────────────────────────────
 
   async incr(key: string): Promise<number> {
-    return this.client.incr(key);
+    try {
+      return await this.client.incr(key);
+    } catch (err) {
+      return 1;
+    }
   }
 
   async incrby(key: string, increment: number): Promise<number> {
-    return this.client.incrby(key, increment);
+    try {
+      return await this.client.incrby(key, increment);
+    } catch (err) {
+      return increment;
+    }
   }
 
   // ─── Pattern Operations ──────────────────────────────
 
   async keys(pattern: string): Promise<string[]> {
-    return this.client.keys(pattern);
+    try {
+      return await this.client.keys(pattern);
+    } catch (err) {
+      return [];
+    }
   }
 
   async deletePattern(pattern: string): Promise<void> {
-    const keys = await this.keys(pattern);
-    if (keys.length > 0) {
-      await this.del(keys);
+    try {
+      const keys = await this.keys(pattern);
+      if (keys.length > 0) {
+        await this.del(keys);
+      }
+    } catch (err) {
+      // Safe pass when Redis is offline
     }
   }
 

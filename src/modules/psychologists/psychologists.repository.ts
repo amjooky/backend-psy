@@ -214,18 +214,23 @@ export class PsychologistsRepository {
     psychologistId: string,
     slots: Array<{ dayOfWeek: string; startTime: string; endTime: string }>,
   ): Promise<void> {
-    await this.prisma.$transaction([
+    const operations: any[] = [
       this.prisma.availabilitySlot.deleteMany({ where: { psychologistId } }),
-      this.prisma.availabilitySlot.createMany({
-        data: slots.map((s) => ({
-          psychologistId,
-          dayOfWeek: s.dayOfWeek as never,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          isActive: true,
-        })),
-      }),
-    ]);
+    ];
+    if (slots && slots.length > 0) {
+      operations.push(
+        this.prisma.availabilitySlot.createMany({
+          data: slots.map((s) => ({
+            psychologistId,
+            dayOfWeek: s.dayOfWeek as never,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            isActive: true,
+          })),
+        }),
+      );
+    }
+    await this.prisma.$transaction(operations);
   }
 
   async listAvailabilityExceptions(psychologistId: string) {

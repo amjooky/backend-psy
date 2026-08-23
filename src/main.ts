@@ -18,7 +18,12 @@ async function bootstrap() {
   const port = configService.get<number>('app.port') || 3000;
   const apiPrefix = configService.get<string>('app.apiPrefix') || 'api/v1';
   const nodeEnv = configService.get<string>('app.nodeEnv') || 'development';
-  const corsOrigins = configService.get<string[]>('cors.origins') || [];
+  const rawCorsOrigins = configService.get<any>('CORS_ORIGINS') || configService.get<any>('cors.origins') || '';
+  const corsOriginsArray = Array.isArray(rawCorsOrigins)
+    ? rawCorsOrigins
+    : typeof rawCorsOrigins === 'string'
+      ? rawCorsOrigins.split(',').map((s) => s.trim())
+      : [];
   const frontendUrl = configService.get<string>('app.frontendUrl') || '';
 
   // ─── Global Prefix ──────────────────────────────────────────
@@ -27,8 +32,8 @@ async function bootstrap() {
   // ─── Security: Helmet ───────────────────────────────────────
   app.use(
     helmet({
-      contentSecurityPolicy: nodeEnv === 'production',
-      crossOriginEmbedderPolicy: nodeEnv === 'production',
+      contentSecurityPolicy: nodeEnv === 'production' ? false : false,
+      crossOriginEmbedderPolicy: false,
     }),
   );
 
@@ -45,14 +50,21 @@ async function bootstrap() {
         callback(null, true);
         return;
       }
-      const allowedOrigins = [...corsOrigins, frontendUrl].filter(Boolean);
+      const allowedOrigins = [...corsOriginsArray, frontendUrl].filter(Boolean);
       const isAllowed = allowedOrigins.some((origin) => {
         if (origin === requestOrigin) return true;
         if (origin.replace(/\/$/, '') === requestOrigin.replace(/\/$/, '')) return true;
         return false;
       });
 
-      if (isAllowed || requestOrigin.endsWith('.educanet.pro') || nodeEnv !== 'production') {
+      if (
+        isAllowed ||
+        requestOrigin.endsWith('.educanet.pro') ||
+        requestOrigin.endsWith('.vercel.app') ||
+        requestOrigin.includes('vercel.app') ||
+        requestOrigin.endsWith('.onrender.com') ||
+        nodeEnv !== 'production'
+      ) {
         callback(null, true);
       } else {
         logger.warn(`CORS blocked for origin: ${requestOrigin}`);
@@ -60,6 +72,7 @@ async function bootstrap() {
       }
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
     credentials: true,
     maxAge: 86400, // 24 hours preflight cache
   });

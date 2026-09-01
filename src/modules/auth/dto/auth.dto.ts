@@ -189,6 +189,11 @@ export class Enable2FaDto {
   @MinLength(6)
   @MaxLength(6)
   code!: string;
+
+  @ApiPropertyOptional({ description: 'Optional secret key for setup fallback' })
+  @IsOptional()
+  @IsString()
+  secret?: string;
 }
 
 export class Verify2FaDto {

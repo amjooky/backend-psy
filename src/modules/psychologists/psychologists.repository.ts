@@ -184,6 +184,7 @@ export class PsychologistsRepository {
       issuer: string;
       issuedAt?: Date;
       expiresAt?: Date;
+      fileUrl?: string;
     },
   ) {
     return this.prisma.certificate.create({

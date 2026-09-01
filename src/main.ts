@@ -9,6 +9,8 @@ import * as express from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 import { AppModule } from './app.module';
+import { InvoiceService } from './modules/payments/invoice.service';
+import { PrismaService } from './database/prisma.service';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -28,6 +30,42 @@ async function bootstrap() {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
   app.use('/uploads', express.static(uploadsDir));
+
+  // Dynamic invoice PDF recovery for ephemeral storage container restarts
+  app.use('/uploads/invoices', async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    try {
+      const filename = req.path.replace(/^\//, '');
+      const invoiceService = app.get(InvoiceService);
+      const prisma = app.get(PrismaService);
+
+      const invoice = await prisma.invoice.findFirst({
+        where: {
+          OR: [
+            { pdfUrl: { contains: filename } },
+            { id: filename.replace('.pdf', '') },
+          ],
+        },
+      });
+
+      if (invoice) {
+        await invoiceService.generateInvoicePdf(invoice.id);
+        const candidatePath = path.join(uploadsDir, 'invoices', filename);
+        if (fs.existsSync(candidatePath)) {
+          return res.sendFile(candidatePath);
+        }
+        const updated = await prisma.invoice.findUnique({ where: { id: invoice.id } });
+        if (updated?.pdfUrl) {
+          const rel = updated.pdfUrl.split('/uploads/invoices/')[1];
+          if (rel && fs.existsSync(path.join(uploadsDir, 'invoices', rel))) {
+            return res.sendFile(path.join(uploadsDir, 'invoices', rel));
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    next();
+  });
   const rawCorsOrigins = configService.get<any>('CORS_ORIGINS') || configService.get<any>('cors.origins') || '';
   const corsOriginsArray = Array.isArray(rawCorsOrigins)
     ? rawCorsOrigins

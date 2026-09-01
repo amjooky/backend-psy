@@ -56,6 +56,8 @@ export class PsychologistsService {
     const updated = await this.psychologistsRepository.update(psy.id, {
       ...(dto.firstName && { firstName: dto.firstName.trim() }),
       ...(dto.lastName && { lastName: dto.lastName.trim() }),
+      ...(dto.licenseNumber && { licenseNumber: dto.licenseNumber.trim() }),
+      ...(dto.isProfileComplete !== undefined && { isProfileComplete: dto.isProfileComplete }),
       ...(dto.biography !== undefined && { biography: dto.biography }),
       ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber }),
       ...(dto.yearsOfExperience !== undefined && { yearsOfExperience: dto.yearsOfExperience }),
@@ -99,13 +101,17 @@ export class PsychologistsService {
     const psy = await this.psychologistsRepository.findByUserId(userId);
     if (!psy) throw new NotFoundException('Psychologist profile not found');
 
-    return this.psychologistsRepository.addCertificate(psy.id, {
+    const effectiveFileUrl = fileUrl || dto.fileUrl;
+    const created = await this.psychologistsRepository.addCertificate(psy.id, {
       title: dto.title,
       issuer: dto.issuer,
       issuedAt: dto.issuedAt ? new Date(dto.issuedAt) : undefined,
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-      ...(fileUrl && { fileUrl }),
+      ...(effectiveFileUrl && { fileUrl: effectiveFileUrl }),
     });
+
+    await this.checkProfileCompleteness(psy.id);
+    return created;
   }
 
   async deleteCertificate(userId: string, certificateId: string) {
@@ -142,6 +148,30 @@ export class PsychologistsService {
           ? 'Certificate approved successfully'
           : 'Certificate rejected successfully',
       certificate,
+    };
+  }
+
+  async completeKyc(userId: string) {
+    const psy = await this.psychologistsRepository.findByUserId(userId);
+    if (!psy) throw new NotFoundException('Psychologist profile not found');
+
+    const updated = await this.psychologistsRepository.update(psy.id, {
+      isProfileComplete: true,
+      status: PsychologistStatus.PENDING_VERIFICATION,
+    });
+
+    await this.notificationsService.createInAppNotification(
+      userId,
+      'Dossier KYC Transmis',
+      'Votre dossier d\'accréditation professionnelle a été transmis avec succès. Notre équipe examine vos diplômes sous 24 à 48 heures.',
+      NotificationType.SYSTEM,
+      { psychologistId: psy.id },
+    );
+
+    await this.redisService.del(CACHE_KEYS.PSYCHOLOGIST(psy.id));
+    return {
+      message: 'Dossier KYC transmis avec succès',
+      psychologist: updated,
     };
   }
 

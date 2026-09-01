@@ -101,7 +101,19 @@ export class PsychologistsController {
     @CurrentUser('sub') userId: string,
     @Body() dto: AddCertificateDto,
   ) {
-    return this.psychologistsService.addCertificate(userId, dto);
+    return this.psychologistsService.addCertificate(userId, dto, dto.fileUrl);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PSYCHOLOGIST)
+  @Post('me/complete-kyc')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Submit psychologist KYC onboarding dossier for administration review' })
+  async completeKyc(
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.psychologistsService.completeKyc(userId);
   }
 
   @ApiBearerAuth()

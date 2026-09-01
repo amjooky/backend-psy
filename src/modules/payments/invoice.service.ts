@@ -5,6 +5,9 @@ import { DocumentsService } from '../documents/documents.service';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 @Injectable()
 export class InvoiceService {
   private readonly logger = new Logger(InvoiceService.name);
@@ -38,10 +41,24 @@ export class InvoiceService {
           ? 'https://backend-psy-upv7.onrender.com'
           : `http://localhost:${serverPort}`);
 
-      if (invoice.pdfUrl.includes('localhost:')) {
-        return invoice.pdfUrl.replace(/http:\/\/localhost:\d+/, baseUrl);
+      let effectiveUrl = invoice.pdfUrl;
+      if (effectiveUrl.includes('localhost:') && !effectiveUrl.includes('localhost:9000')) {
+        effectiveUrl = effectiveUrl.replace(/http:\/\/localhost:\d+/, baseUrl);
       }
-      return invoice.pdfUrl;
+
+      // Check if local file exists on disk (Render container restart safety)
+      if (effectiveUrl.includes('/uploads/')) {
+        const relativePart = effectiveUrl.split('/uploads/')[1];
+        if (relativePart) {
+          const localPath = path.join(process.cwd(), 'uploads', relativePart);
+          if (!fs.existsSync(localPath)) {
+            this.logger.warn(`Invoice PDF missing on disk at ${localPath}, regenerating on the fly...`);
+            return this.generateInvoicePdf(invoiceId);
+          }
+        }
+      }
+
+      return effectiveUrl;
     }
 
     return this.generateInvoicePdf(invoiceId);

@@ -84,6 +84,17 @@ export class UpdatePsychologistProfileDto {
   @Max(180)
   sessionDurationMins?: number;
 
+  @ApiPropertyOptional({ example: 'CNOM-TN-123456' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  licenseNumber?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isProfileComplete?: boolean;
+
   @ApiPropertyOptional({ description: 'FCM push notification token' })
   @IsOptional()
   @IsString()
@@ -121,6 +132,11 @@ export class AddCertificateDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
+
+  @ApiPropertyOptional({ example: 'https://backend-psy-upv7.onrender.com/uploads/certificates/diploma.pdf' })
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
 }
 
 export class SetVacationModeDto {

@@ -527,11 +527,13 @@ export class AuthService {
       CACHE_KEYS.TWO_FACTOR(userId),
     );
 
-    if (!encryptedSecret) {
+    const secret = encryptedSecret
+      ? this.crypto.decrypt(encryptedSecret)
+      : (dto as any).secret;
+
+    if (!secret) {
       throw new BadRequestException('2FA setup session expired. Please restart.');
     }
-
-    const secret = this.crypto.decrypt(encryptedSecret);
 
     const isValid = speakeasy.totp.verify({
       secret,

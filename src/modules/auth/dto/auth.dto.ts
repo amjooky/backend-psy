@@ -7,6 +7,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class RegisterPatientDto {
@@ -115,6 +116,7 @@ export class LoginDto {
 
   @ApiPropertyOptional({ example: '123456', description: '6-digit 2FA code' })
   @IsOptional()
+  @ValidateIf((o) => !!o.twoFactorCode)
   @IsString()
   @MinLength(6)
   @MaxLength(6)

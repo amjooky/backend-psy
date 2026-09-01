@@ -353,6 +353,58 @@ export class AppointmentsService {
     return updated;
   }
 
+  async completeAppointment(userId: string, userRole: UserRole, id: string) {
+    const appt = await this.appointmentsRepository.findById(id);
+    if (!appt) {
+      throw new NotFoundException('Appointment not found.');
+    }
+
+    // Ownership check: must be patient, psychologist, or admin
+    if (userRole === UserRole.PATIENT && appt.patient.userId !== userId) {
+      throw new ForbiddenException('Access denied.');
+    }
+    if (userRole === UserRole.PSYCHOLOGIST && appt.psychologist.userId !== userId) {
+      throw new ForbiddenException('Access denied.');
+    }
+
+    if (appt.status === AppointmentStatus.COMPLETED) {
+      return appt;
+    }
+
+    if (appt.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Cannot complete a cancelled appointment.');
+    }
+
+    const updated = await this.appointmentsRepository.update(id, {
+      status: AppointmentStatus.COMPLETED,
+    });
+
+    await this.appointmentsRepository.createHistory({
+      appointmentId: id,
+      fromStatus: appt.status,
+      toStatus: AppointmentStatus.COMPLETED,
+      changedBy: userId,
+      reason: 'Session completed.',
+    });
+
+    // Notify patient to leave a review if it was completed by psychologist
+    if (userRole !== UserRole.PATIENT) {
+      try {
+        await this.notificationsService.createInAppNotification(
+          appt.patient.userId,
+          'Séance terminée — Donnez votre avis',
+          `Votre consultation avec Dr. ${appt.psychologist.firstName} ${appt.psychologist.lastName} est terminée. Partagez votre retour d'expérience !`,
+          NotificationType.APPOINTMENT_COMPLETED,
+          { appointmentId: id }
+        );
+      } catch (err: any) {
+        console.error(`Failed to send session completed notification: ${err.message}`);
+      }
+    }
+
+    return updated;
+  }
+
   async listAppointments(userId: string, userRole: UserRole, query: AppointmentQueryDto) {
     const where: Prisma.AppointmentWhereInput = {};
 

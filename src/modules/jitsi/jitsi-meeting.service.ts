@@ -227,6 +227,8 @@ export class JitsiMeetingService {
       password: room!.password,
       token,
       domain,
+      doctorName: `Dr. ${appointment.psychologist.firstName} ${appointment.psychologist.lastName}`,
+      psychologistId: appointment.psychologist.id,
       userInfo: {
         displayName: userDetails.fullName,
         email: userDetails.email,

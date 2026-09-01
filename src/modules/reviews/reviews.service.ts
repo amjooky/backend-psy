@@ -37,7 +37,21 @@ export class ReviewsService {
       throw new BadRequestException('You can only review appointments booked by you.');
     }
 
-    if (appointment.status !== AppointmentStatus.COMPLETED) {
+    if (appointment.status === AppointmentStatus.CONFIRMED) {
+      await this.prisma.appointment.update({
+        where: { id: dto.appointmentId },
+        data: { status: AppointmentStatus.COMPLETED },
+      });
+      await this.prisma.appointmentHistory.create({
+        data: {
+          appointmentId: dto.appointmentId,
+          fromStatus: AppointmentStatus.CONFIRMED,
+          toStatus: AppointmentStatus.COMPLETED,
+          changedBy: userId,
+          reason: 'Session completed via review submission.',
+        },
+      });
+    } else if (appointment.status !== AppointmentStatus.COMPLETED) {
       throw new BadRequestException('Reviews are only allowed for completed sessions.');
     }
 

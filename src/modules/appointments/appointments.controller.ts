@@ -65,6 +65,15 @@ export class AppointmentsController {
     return this.appointmentsService.acceptAppointment(userId, id);
   }
 
+  @Post(':id/complete')
+  @ApiOperation({ summary: 'Mark an appointment session as completed' })
+  async complete(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.appointmentsService.completeAppointment(user.sub, user.role, id);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List user appointments (patient or psychologist)' })
   async list(@CurrentUser() user: JwtPayload, @Query() query: AppointmentQueryDto) {
